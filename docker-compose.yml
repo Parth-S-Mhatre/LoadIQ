@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: load-forecast-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend-lstm
+      - backend-xgboost
+    restart: unless-stopped
+
+  backend-lstm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: load-forecast-lstm
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./Backend/serviceAccountKey.json:/app/serviceAccountKey.json
+    environment:
+      - PORT=8000
+    command: uvicorn model2:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+  backend-xgboost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: load-forecast-xgboost
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./Backend/serviceAccountKey.json:/app/serviceAccountKey.json
+    environment:
+      - PORT=8001
+    command: uvicorn model1:app --host 0.0.0.0 --port 8001
+    restart: unless-stopped
