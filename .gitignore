@@ -22,6 +22,8 @@ var/
 wheels/
 *.egg-info/
 .installed.cfg
+# Large Data
+DATA/
 *.egg
 
 # Virtual Environment
