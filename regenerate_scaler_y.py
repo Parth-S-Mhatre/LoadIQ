@@ -5,7 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 # Create a scaler for Load (target)
 # Assuming load is between 30,000 and 90,000 MW
 # We add some buffer
-data = np.array([20000, 100000]).reshape(-1, 1)
+data = np.array([19999, 100001]).reshape(-1, 1)
 
 scaler_y = MinMaxScaler()
 scaler_y.fit(data)
