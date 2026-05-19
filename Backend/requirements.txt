@@ -7,3 +7,4 @@ pydantic
 firebase-admin
 pandas
 xgboost
+lightgbm
