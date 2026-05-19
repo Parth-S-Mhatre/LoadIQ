@@ -1,0 +1,9 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+numpy==1.26.4
+joblib
+scikit-learn
+pydantic
+firebase-admin
+pandas
+xgboost

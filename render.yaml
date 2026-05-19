@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: loadiq-model1
+    runtime: python
+    rootDir: Backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn Model1:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENABLE_FIREBASE_LOGGING
+        value: "false"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+  - type: web
+    name: loadiq-model2
+    runtime: python
+    rootDir: Backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m uvicorn Model2:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENABLE_FIREBASE_LOGGING
+        value: "false"
+      - key: PYTHONUNBUFFERED
+        value: "1"
