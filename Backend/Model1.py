@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import joblib
+import os
 
 # ---------------------------------------------------
 # Paths & Artifact Loading
@@ -97,10 +98,32 @@ app = FastAPI(
     version="2.0.0",
 )
 
+
+def _cors_origins_from_env() -> list[str]:
+    """
+    Configure CORS from env in production while keeping local defaults simple.
+    - FRONTEND_ORIGINS: comma-separated list
+    - FRONTEND_ORIGIN: single origin
+    Falls back to '*' when not provided.
+    """
+    origins_csv = os.getenv("FRONTEND_ORIGINS", "").strip()
+    single_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
+    if origins_csv:
+        origins = [o.strip() for o in origins_csv.split(",") if o.strip()]
+        if origins:
+            return origins
+    if single_origin:
+        return [single_origin]
+    return ["*"]
+
+
+_cors_origins = _cors_origins_from_env()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      # restrict in production
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    # Wildcard origins cannot be combined with credentialed CORS.
+    allow_credentials=_cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
