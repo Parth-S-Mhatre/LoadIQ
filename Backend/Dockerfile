@@ -18,4 +18,4 @@ EXPOSE 8000
 
 # Run the app
 # Use shell form to allow variable expansion for PORT
-CMD sh -c "uvicorn model2:app --host 0.0.0.0 --port ${PORT:-8000}"
+CMD sh -c "uvicorn Model2:app --host 0.0.0.0 --port ${PORT:-8000}"

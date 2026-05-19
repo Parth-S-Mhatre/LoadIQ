@@ -20,4 +20,5 @@ COPY DATA_preprocessing /DATA_preprocessing
 EXPOSE 8000
 
 # Run the application (Default command, can be overridden)
-CMD ["uvicorn", "model2:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use shell form to support Render's dynamic PORT.
+CMD sh -c "uvicorn Model2:app --host 0.0.0.0 --port ${PORT:-8000}"
