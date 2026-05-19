@@ -4,6 +4,11 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
+# Install runtime libs required by LightGBM/XGBoost
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy requirements first (better caching)
 COPY requirements.txt .
 
@@ -17,5 +22,5 @@ COPY . .
 EXPOSE 8000
 
 # Run the app
-# Use shell form to allow variable expansion for PORT
-CMD sh -c "uvicorn Model2:app --host 0.0.0.0 --port ${PORT:-8000}"
+# Use JSON form and shell expansion for dynamic PORT.
+CMD ["sh", "-c", "uvicorn Model2:app --host 0.0.0.0 --port ${PORT:-8000}"]
