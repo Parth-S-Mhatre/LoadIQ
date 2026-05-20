@@ -1,27 +1,64 @@
 // API Configuration for LoadIQ Backend
-const resolveBaseUrl = () => {
-    if (process.env.REACT_APP_API_URL) {
-        return process.env.REACT_APP_API_URL;
+const trimTrailingSlash = (url) => url.replace(/\/+$/, '');
+const isLocalHost = () => {
+    if (typeof window === 'undefined') {
+        return false;
     }
 
-    if (typeof window !== 'undefined') {
-        const host = window.location.hostname;
-        if (host === 'localhost' || host === '127.0.0.1') {
-            return 'http://127.0.0.1:8002';
-        }
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+};
+
+const shouldUseLocalModelApis = () => {
+    return process.env.REACT_APP_USE_LOCAL_MODEL_APIS === 'true';
+};
+
+const resolveBaseUrl = () => {
+    if (process.env.REACT_APP_API_URL) {
+        return trimTrailingSlash(process.env.REACT_APP_API_URL);
+    }
+
+    if (isLocalHost() && shouldUseLocalModelApis()) {
+        return 'http://127.0.0.1:8002';
     }
 
     return 'https://loadiq.onrender.com';
 };
 
+const resolveModel1Url = () => {
+    if (process.env.REACT_APP_MODEL1_API) {
+        return trimTrailingSlash(process.env.REACT_APP_MODEL1_API);
+    }
+
+    if (isLocalHost() && shouldUseLocalModelApis()) {
+        return 'http://127.0.0.1:8001';
+    }
+
+    return 'https://loadiq-model1-production.up.railway.app';
+};
+
+const resolveModel2Url = () => {
+    if (process.env.REACT_APP_MODEL2_API) {
+        return trimTrailingSlash(process.env.REACT_APP_MODEL2_API);
+    }
+
+    if (isLocalHost() && shouldUseLocalModelApis()) {
+        return 'http://127.0.0.1:8002';
+    }
+
+    return 'https://loadiq-model2-production.up.railway.app';
+};
+
 export const API_CONFIG = {
     BASE_URL: resolveBaseUrl(),
+    MODEL1_API: resolveModel1Url(),
+    MODEL2_API: resolveModel2Url(),
     ENDPOINTS: {
         PREDICT: '/predict',
         HEALTH: '/health',
         HEALTH_CHECK: '/api/health_check',
         DEBUG_PREDICT: '/debug_predict',
-        PREDICT_BATCH: '/predict_batch'
+        PREDICT_BATCH: '/predict_batch',
+        FORECAST: '/forecast'
     },
     TIMEOUTS: {
         DEFAULT: 10000, // 10 seconds
@@ -41,6 +78,16 @@ export const API_CONFIG = {
 // Helper function to build full URL
 export const buildUrl = (endpoint) => {
     return `${API_CONFIG.BASE_URL}${endpoint}`;
+};
+
+// Helper function to build Model1 URL for single predictions
+export const buildModel1Url = (endpoint) => {
+    return `${API_CONFIG.MODEL1_API}${endpoint}`;
+};
+
+// Helper function to build Model2 URL for batch predictions and forecasts
+export const buildModel2Url = (endpoint) => {
+    return `${API_CONFIG.MODEL2_API}${endpoint}`;
 };
 
 // Helper function for exponential backoff

@@ -1,7 +1,21 @@
 import { db } from '../firebase';
-import { collection, addDoc, query, where, orderBy, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const ANALYTICS_COLLECTION = 'user_analytics';
+const PROFILE_COLLECTION = 'user_profiles';
+
+const toTimestampValue = (value) => {
+  if (!value) {
+    return 0;
+  }
+
+  if (typeof value?.toDate === 'function') {
+    return value.toDate().getTime();
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+};
 
 export const UserHistoryService = {
   /**
@@ -11,17 +25,35 @@ export const UserHistoryService = {
    */
   savePrediction: async (userId, analyticsData) => {
     try {
+      const timestamp = new Date();
+      const predictionSeries = Array.isArray(analyticsData.predictions)
+        ? analyticsData.predictions.map((value, index) => ({
+            step: index + 1,
+            value: Number(value)
+          })).filter((item) => Number.isFinite(item.value))
+        : [];
+
       const docRef = await addDoc(collection(db, ANALYTICS_COLLECTION), {
         userId,
-        timestamp: new Date(),
+        timestamp,
+        timestampIso: timestamp.toISOString(),
         type: 'prediction',
         forecastHorizon: analyticsData.forecastHorizon || 6,
-        predictions: analyticsData.predictions || [],
+        model: analyticsData.model || 'ensemble',
+        predictionSource: analyticsData.predictionSource || 'ml_model',
+        fallbackUsed: Boolean(analyticsData.fallbackUsed),
+        fallbackReason: analyticsData.fallbackReason || null,
+        predictions: predictionSeries.map((item) => item.value),
+        predictionSeries,
         historicalLoads: analyticsData.historicalLoads || [],
+        latestPrediction: analyticsData.latestPrediction ?? predictionSeries[predictionSeries.length - 1]?.value ?? null,
+        nextHourPrediction: analyticsData.nextHourPrediction ?? predictionSeries[0]?.value ?? null,
         statistics: {
           average: analyticsData.average,
           peak: analyticsData.peak,
           minimum: analyticsData.minimum,
+          lastActual: analyticsData.lastActual,
+          firstPrediction: analyticsData.firstPrediction,
           delta: analyticsData.delta,
           direction: analyticsData.direction
         },
@@ -43,15 +75,16 @@ export const UserHistoryService = {
     try {
       const q = query(
         collection(db, ANALYTICS_COLLECTION),
-        where('userId', '==', userId),
-        orderBy('timestamp', 'desc')
+        where('userId', '==', userId)
       );
 
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })).slice(0, limit);
+      }))
+        .sort((a, b) => toTimestampValue(b.timestamp || b.timestampIso) - toTimestampValue(a.timestamp || a.timestampIso))
+        .slice(0, limit);
     } catch (error) {
       console.error('Error fetching user analytics:', error);
       return [];
@@ -65,16 +98,28 @@ export const UserHistoryService = {
    */
   saveUserProfile: async (userId, profileData) => {
     try {
-      const docRef = await addDoc(collection(db, 'user_profiles'), {
+      const profileRef = doc(db, PROFILE_COLLECTION, userId);
+      const existingProfile = await getDoc(profileRef);
+      await setDoc(profileRef, {
         userId,
         ...profileData,
-        createdAt: new Date(),
+        createdAt: existingProfile.exists() ? existingProfile.data().createdAt || new Date() : new Date(),
         updatedAt: new Date()
-      });
-      return docRef.id;
+      }, { merge: true });
+      return profileRef.id;
     } catch (error) {
       console.error('Error saving user profile:', error);
       throw error;
+    }
+  },
+
+  getUserProfile: async (userId) => {
+    try {
+      const profileSnapshot = await getDoc(doc(db, PROFILE_COLLECTION, userId));
+      return profileSnapshot.exists() ? profileSnapshot.data() : null;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return null;
     }
   },
 
@@ -91,15 +136,15 @@ export const UserHistoryService = {
       const q = query(
         collection(db, ANALYTICS_COLLECTION),
         where('userId', '==', userId),
-        where('timestamp', '>=', date),
-        orderBy('timestamp', 'desc')
+        where('timestamp', '>=', date)
       );
 
       const snapshot = await getDocs(q);
       return snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }));
+      }))
+        .sort((a, b) => toTimestampValue(b.timestamp || b.timestampIso) - toTimestampValue(a.timestamp || a.timestampIso));
     } catch (error) {
       console.error('Error fetching analytics for period:', error);
       return [];

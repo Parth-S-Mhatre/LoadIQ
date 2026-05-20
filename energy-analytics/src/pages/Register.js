@@ -1,24 +1,41 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createUserWithEmailAndPassword, updateProfile, signInWithPopup, signInWithRedirect } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import { getFriendlyAuthError } from "../utils/authErrors";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-import { Zap, Home, Mail, Lock, User, ArrowRight } from "lucide-react";
+import { Zap, Home, Mail, Lock, User, ArrowRight, Users } from "lucide-react";
 
 export default function Register() {
   const [formData, setFormData] = useState({ fullName: "", email: "", password: "", confirmPassword: "" });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isNewUser } = useAuth();
+  const inviteParams = new URLSearchParams(location.search);
+  const inviteWorkspace = inviteParams.get("workspace") || "";
+  const inviteOrganization = inviteParams.get("organization") || "";
+  const inviteSender = inviteParams.get("invitedBy") || "";
 
   useEffect(() => {
     if (user) {
       navigate(isNewUser ? "/profile" : "/dashboard");
     }
   }, [user, isNewUser, navigate]);
+
+  useEffect(() => {
+    if (!inviteWorkspace && !inviteOrganization && !inviteSender) {
+      return;
+    }
+
+    localStorage.setItem("pendingInviteContext", JSON.stringify({
+      workspaceName: inviteWorkspace,
+      organization: inviteOrganization,
+      invitedBy: inviteSender
+    }));
+  }, [inviteWorkspace, inviteOrganization, inviteSender]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -144,51 +161,83 @@ export default function Register() {
               </motion.div>
             )}
 
+            {(inviteWorkspace || inviteOrganization || inviteSender) && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-sm text-cyan-100"
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <Users size={16} />
+                  <span className="font-bold">Workspace invite detected</span>
+                </div>
+                <p>
+                  Join {inviteWorkspace || inviteOrganization || "a LoadIQ workspace"}
+                  {inviteSender ? ` shared by ${inviteSender}` : ""}.
+                </p>
+              </motion.div>
+            )}
+
             <form onSubmit={handleRegister} className="space-y-5">
-              <div className="space-y-2">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="space-y-2"
+              >
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <User size={16} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                    <User size={16} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors duration-300" />
                   </div>
                   <input
                     type="text"
                     value={formData.fullName}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    className="w-full h-12 glass-input rounded-xl pl-11 pr-4 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)]"
+                    className="w-full h-12 glass-input rounded-xl pl-11 pr-4 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)] transition-all duration-300 hover:border-cyan-500/30"
                     placeholder="John Doe"
                   />
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="space-y-2">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="space-y-2"
+              >
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Email Address</label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <Mail size={16} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                    <Mail size={16} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors duration-300" />
                   </div>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full h-12 glass-input rounded-xl pl-11 pr-4 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)]"
+                    className="w-full h-12 glass-input rounded-xl pl-11 pr-4 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)] transition-all duration-300 hover:border-cyan-500/30"
                     placeholder="operator@loadgrid.ai"
                   />
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="grid grid-cols-2 gap-4"
+              >
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Password</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock size={14} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                      <Lock size={14} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors duration-300" />
                     </div>
                     <input
                       type="password"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full h-12 glass-input rounded-xl pl-9 pr-3 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)]"
+                      className="w-full h-12 glass-input rounded-xl pl-9 pr-3 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)] transition-all duration-300 hover:border-cyan-500/30"
                       placeholder="••••••"
                     />
                   </div>
@@ -198,34 +247,37 @@ export default function Register() {
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Confirm</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Lock size={14} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors" />
+                      <Lock size={14} className="text-slate-500 group-focus-within:text-cyan-400 transition-colors duration-300" />
                     </div>
                     <input
                       type="password"
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      className="w-full h-12 glass-input rounded-xl pl-9 pr-3 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)]"
+                      className="w-full h-12 glass-input rounded-xl pl-9 pr-3 text-sm focus:bg-[rgba(15,23,42,0.8)] focus:border-cyan-500 focus:shadow-[0_0_0_2px_rgba(6,182,212,0.2)] transition-all duration-300 hover:border-cyan-500/30"
                       placeholder="••••••"
                     />
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
-              <button
+              <motion.button
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
                 type="submit"
                 disabled={isLoading}
                 style={{ transform: "translateZ(20px)" }}
-                className="w-full h-12 mt-6 bg-[#06B6D4] hover:bg-[#0891B2] text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-[0_4px_14px_0_rgba(6,182,212,0.39)] hover:shadow-[0_6px_20px_rgba(6,182,212,0.23)] hover:-translate-y-0.5 flex items-center justify-center gap-2 group relative overflow-hidden"
+                className="w-full h-12 mt-6 bg-[#06B6D4] hover:bg-[#0891B2] text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 shadow-[0_4px_14px_0_rgba(6,182,212,0.39)] hover:shadow-[0_6px_20px_rgba(6,182,212,0.23)] hover:-translate-y-0.5 flex items-center justify-center gap-2 group relative overflow-hidden active:scale-95 disabled:opacity-60"
               >
                 {isLoading ? (
                   <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                 ) : (
                   <>
                     Register Action
-                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform duration-300" />
                   </>
                 )}
-              </button>
+              </motion.button>
             </form>
 
             <div className="my-6 flex items-center gap-4">
@@ -234,23 +286,38 @@ export default function Register() {
               <div className="h-px bg-white/10 flex-1"></div>
             </div>
 
-            <button
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
               onClick={handleGoogleSignIn}
+              disabled={isLoading}
               style={{ transform: "translateZ(15px)" }}
-              className="w-full h-12 bg-[#10162A] hover:bg-[#151B30] border border-white/5 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-3 hover:-translate-y-0.5"
+              className="w-full h-12 bg-[#10162A] hover:bg-[#151B30] border border-white/5 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-3 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path fill="currentColor" d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.82-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27c3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10c5.35 0 9.25-3.67 9.25-9.09c0-1.15-.15-1.81-.15-1.81Z" />
               </svg>
               Google
-            </button>
+            </motion.button>
 
-            <p className="text-center text-xs font-semibold text-slate-400 mt-8" style={{ transform: "translateZ(10px)" }}>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              className="text-center text-xs font-semibold text-slate-400 mt-8"
+              style={{ transform: "translateZ(10px)" }}
+            >
               Already registered?{" "}
-              <button onClick={() => navigate("/login")} className="text-cyan-400 hover:text-cyan-300 transition-colors">
+              <motion.button
+                onClick={() => navigate(`/login${location.search}`)}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="text-cyan-400 hover:text-cyan-300 transition-colors duration-300 font-bold"
+              >
                 Sign In
-              </button>
-            </p>
+              </motion.button>
+            </motion.p>
           </div>
         </motion.div>
       </div>

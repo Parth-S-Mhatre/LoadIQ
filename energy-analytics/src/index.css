@@ -45,6 +45,20 @@
         color: #FFFFFF;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        scroll-behavior: smooth;
+    }
+
+    * {
+        -webkit-backface-visibility: hidden;
+    }
+
+    button,
+    input,
+    select,
+    textarea,
+    a,
+    [data-motion-safe="true"] {
+        transform: translateZ(0);
     }
 }
 
@@ -67,6 +81,15 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #6366F1;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 /* Animations */
@@ -235,4 +258,29 @@
     border-color: #6366F1;
     outline: none;
     box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+@media (max-width: 768px) {
+    html {
+        font-size: 15px;
+    }
+
+    .glass-panel {
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+    }
+
+    .navy-card,
+    .glass-panel {
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+    }
+}
+
+@media (pointer: coarse) {
+    .hover-lift:hover,
+    .navy-card-hover:hover,
+    .glass-panel:hover {
+        transform: none;
+        box-shadow: inherit;
+    }
 }

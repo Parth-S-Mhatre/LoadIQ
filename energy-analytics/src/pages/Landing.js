@@ -2,7 +2,12 @@ import React, { lazy, Suspense, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { motion } from "framer-motion";
-import { ArrowRight, Activity, Shield, Leaf, Cpu, BarChart2, Target, Zap, Map, FileText, Bot, Layers, Radio, Menu, X } from "lucide-react";
+import { ArrowRight, Activity, Shield, Leaf, Zap, Map, FileText, Bot, Layers, Radio, Menu, X } from "lucide-react";
+import plotActualVsPredicted from '../Images_result/plot_actual_vs_predicted.png';
+import plotErrorByHour from '../Images_result/plot_error_by_hour.png';
+import plotFeatureImportance from '../Images_result/plot_feature_importance.png';
+import plotResiduals from '../Images_result/plot_residuals.png';
+
 const ThreeBackground = lazy(() => import("../components/3d/ThreeBackground"));
 
 export default function Landing() {
@@ -10,6 +15,7 @@ export default function Landing() {
   const { user } = useAuth();
   const [showCookies, setShowCookies] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showThreeBackground, setShowThreeBackground] = useState(false);
 
   useEffect(() => {
     const consent = localStorage.getItem("cookies-consent");
@@ -17,6 +23,26 @@ export default function Landing() {
       const timer = setTimeout(() => setShowCookies(true), 1500);
       return () => clearTimeout(timer);
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updateBackgroundPreference = () => {
+      setShowThreeBackground(window.innerWidth >= 1024 && !mediaQuery.matches);
+    };
+
+    updateBackgroundPreference();
+    window.addEventListener("resize", updateBackgroundPreference);
+    mediaQuery.addEventListener?.("change", updateBackgroundPreference);
+
+    return () => {
+      window.removeEventListener("resize", updateBackgroundPreference);
+      mediaQuery.removeEventListener?.("change", updateBackgroundPreference);
+    };
   }, []);
 
   const acceptCookies = () => {
@@ -38,16 +64,18 @@ export default function Landing() {
     <div className="relative min-h-screen bg-[#080B14] text-white selection:bg-[#6366F1]/30 overflow-x-hidden font-sans">
 
       {/* 3D Background Layer */}
-      <Suspense fallback={null}>
-        <ThreeBackground />
-      </Suspense>
+      {showThreeBackground && (
+        <Suspense fallback={null}>
+          <ThreeBackground />
+        </Suspense>
+      )}
 
       {/* Overlay to ensure text readability */}
       <div className="fixed inset-0 bg-[#080B14]/40 pointer-events-none z-0"></div>
 
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-md border-b border-white/5 bg-[#080B14]/70 transition-all duration-300">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/")}>
             <div className="w-10 h-10 bg-gradient-to-tr from-indigo-600 to-cyan-400 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
               <Zap className="text-white fill-current" size={20} />
@@ -122,7 +150,7 @@ export default function Landing() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 px-6 z-10 flex flex-col items-center text-center max-w-5xl mx-auto min-h-screen justify-center">
+      <section className="relative pt-28 pb-16 px-4 sm:px-6 z-10 flex flex-col items-center text-center max-w-5xl mx-auto min-h-screen justify-center">
         <motion.div
           initial="hidden"
           animate="visible"
@@ -137,16 +165,15 @@ export default function Landing() {
             <span className="text-xs font-bold uppercase tracking-widest text-indigo-300">Next-Gen Forecasting Engine</span>
           </motion.div>
 
-          <motion.h1 variants={fadeInUp} className="text-5xl md:text-8xl font-black tracking-tighter leading-tight md:leading-[1.1]">
+          <motion.h1 variants={fadeInUp} className="text-4xl sm:text-5xl md:text-8xl font-black tracking-tighter leading-tight md:leading-[1.1]">
             Predict the <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-cyan-400 to-emerald-400">
               Energy Pulse.
             </span>
           </motion.h1>
 
-          <motion.p variants={fadeInUp} className="text-base md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed px-4">
-            Advanced LSTM neural networks meet real-time grid analytics.
-            Optimize distribution, reduce waste, and anticipate demand surges with precision.
+          <motion.p variants={fadeInUp} className="text-base md:text-xl text-slate-300 max-w-4xl mx-auto leading-relaxed px-4">
+            LoadIQ is an AI-powered electricity load forecasting platform built for the modern grid. It predicts real-time energy demand across four countries - the UK, USA, Germany, and India - using machine learning models trained on six years of half-hourly grid data. Unlike conventional monitoring tools that pre-load everything and drain server resources, LoadIQ is engineered to be as efficient as the sustainable future it helps build.
           </motion.p>
 
           <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8 w-full px-6">
@@ -179,15 +206,29 @@ export default function Landing() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl md:text-5xl font-bold mb-4">Intelligence at Scale</h2>
-            <p className="text-slate-400 text-sm md:text-base">Powered by state-of-the-art infrastructure.</p>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">What Makes It Different</h2>
+            <p className="text-slate-300 text-sm md:text-base max-w-4xl mx-auto leading-relaxed">
+              Most platforms load everything upfront - every chart, every dataset, every component - whether you need it or not. LoadIQ does the opposite. Pages render only when you navigate to them, using skeleton screens to keep the experience instant. The AI chatbot, trained specifically on electricity consumption patterns across the UK, USA, Germany, and India, understands grid behaviour - not just language. Feed it your dashboard readings and it tells you how healthy your grid looks, where demand is heading, and what that means for emissions.
+            </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { icon: <Activity />, title: "Time-Series Analysis", desc: "LSTM & GRU architectures process historical load data to forecast future demand with up to 98% accuracy." },
-              { icon: <Shield />, title: "Anomaly Detection", desc: "Real-time outlier detection algorithms instantly flag potential grid failures or data inconsistencies." },
-              { icon: <Leaf />, title: "Sustainability First", desc: "Optimize renewable integration by aligning consumption patterns with solar and wind generation peaks." }
+              {
+                icon: <Activity />,
+                title: "Grid-Scale Dataset",
+                desc: "LoadIQ is built on six years of half-hourly electricity demand history, shaped with calendar signals, lag windows, and rolling statistics so the model learns daily ramps, weekly behaviour, and seasonal demand shifts instead of reacting to isolated points."
+              },
+              {
+                icon: <Shield />,
+                title: "Ensemble Forecasting",
+                desc: "Our production forecasting flow combines LightGBM and XGBoost in an ensemble, with ridge kept as a benchmark path. The backend uses the latest demand window, lag features, and rolling summaries to turn raw load traces into stable short-term forecasts."
+              },
+              {
+                icon: <Leaf />,
+                title: "Smart Delivery",
+                desc: "Heavy routes, backend-powered pages, and visual layers are loaded only when needed. Skeleton paging covers backend and network wait states, which keeps the platform responsive while avoiding the waste of preloading every chart, module, and model upfront."
+              }
             ].map((f, i) => (
               <motion.div
                 key={i}
@@ -208,7 +249,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Interactive 3D/Tech Section */}
+      {/* Smart Engineering Section */}
       <section className="py-24 px-6 relative z-10 glass-panel border-y border-white/5 overflow-hidden">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
           <motion.div
@@ -218,20 +259,20 @@ export default function Landing() {
             transition={{ duration: 0.8 }}
           >
             <h2 className="text-4xl md:text-6xl font-black mb-6 tracking-tight">
-              See the Grid in <br />
-              <span className="text-indigo-400">Three Dimensions.</span>
+              Smart Engineering <br />
+              <span className="text-indigo-400">Behind Every Forecast.</span>
             </h2>
             <p className="text-slate-300 text-lg mb-8 leading-relaxed">
-              Our 3D visualization engine provides unprecedented situational awareness. Rotate, zoom, and inspect load distribution across temporal and spatial dimensions.
+              LoadIQ does not force the browser to preload every dashboard, dataset, model path, and visual layer before you even need them. Backend-driven pages arrive on demand, skeleton states hold the interface steady during network or service delays, and heavier rendering stays conditional so the platform remains smooth, practical, and more respectful of compute and energy use.
             </p>
             <div className="flex flex-wrap gap-4">
               <div className="px-5 py-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                <span className="text-sm font-bold text-slate-300">WebGL 2.0</span>
+                <span className="text-sm font-bold text-slate-300">On-Demand Routes</span>
               </div>
               <div className="px-5 py-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
-                <span className="text-sm font-bold text-slate-300">React Three Fiber</span>
+                <span className="text-sm font-bold text-slate-300">Skeleton Paging</span>
               </div>
             </div>
           </motion.div>
@@ -248,7 +289,7 @@ export default function Landing() {
               <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mx-auto mb-4 border border-white/20 group-hover:scale-110 transition-transform cursor-pointer shadow-2xl">
                 <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[18px] border-l-white border-b-[10px] border-b-transparent ml-1"></div>
               </div>
-              <p className="font-bold text-white tracking-widest text-sm uppercase">Interactive Demo</p>
+              <p className="font-bold text-white tracking-widest text-sm uppercase">Adaptive Rendering</p>
             </div>
           </motion.div>
         </div>
@@ -259,16 +300,36 @@ export default function Landing() {
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
             <span className="text-indigo-400 font-bold tracking-widest text-xs uppercase mb-3 block">Under the Hood</span>
-            <h2 className="text-3xl md:text-5xl font-bold">Model Training Methodology</h2>
+            <h2 className="text-3xl md:text-5xl font-bold">How the Forecast Stack Works</h2>
           </div>
 
           <div className="space-y-6">
             {[
-              { title: "Data Ingestion", desc: "Aggregating data from ENTSO-E, weather APIs, and historical CSV logs.", color: "bg-blue-500" },
-              { title: "Preprocessing", desc: "Normalization (MinMax Scaling), handling missing values, and lag feature creation.", color: "bg-indigo-500" },
-              { title: "Model Architecture", desc: "Two stacked LSTM layers (50 units) + Dropout (0.2) + Dense Output Layer.", color: "bg-violet-500" },
-              { title: "Training", desc: "Adam Optimizer, MSE Loss Function, 50 Epochs with Early Stopping.", color: "bg-purple-500" },
-              { title: "Validation", desc: "Walk-forward validation on holdout test set to ensure generalizability.", color: "bg-fuchsia-500" }
+              {
+                title: "Dataset Summary",
+                desc: "The forecasting pipeline is trained on multi-year, half-hourly electricity demand records, preserving intraday ramps, weekday and weekend cycles, and broader seasonal variation. That long-view dataset gives the model enough context to recognise both routine demand shape and sudden stress periods.",
+                color: "bg-blue-500"
+              },
+              {
+                title: "Feature Engineering",
+                desc: "Instead of depending on raw series alone, the backend builds hour, day, month, lag, and rolling statistics from the most recent demand window. Features such as last_24_hours, lag values, rolling mean, and rolling standard deviation help the model understand momentum, recent peaks, and short-term volatility.",
+                color: "bg-indigo-500"
+              },
+              {
+                title: "Production Model",
+                desc: "The deployed forecast path uses an ensemble weighted toward LightGBM with XGBoost support, while ridge remains available as a lightweight comparison path. In the backend ensemble flow, the final prediction blends the strongest tree-based models rather than relying on a single estimator.",
+                color: "bg-violet-500"
+              },
+              {
+                title: "Smart Serving",
+                desc: "Model artifacts are loaded on demand, backend routes are called only when the page actually needs them, and inactive heavy paths can be kept out of memory until requested. That avoids the wasteful pattern of preloading everything and helps the platform stay lighter under real usage.",
+                color: "bg-purple-500"
+              },
+              {
+                title: "Operator Context",
+                desc: "The interactive chatbot is trained around electricity behaviour in the UK, USA, Germany, and India, and it reads simulator and dashboard context before responding. Give it live dashboard-style inputs and it explains grid health, expected demand direction, and operational meaning in plain language for an eco-conscious analysis workflow.",
+                color: "bg-fuchsia-500"
+              }
             ].map((step, i) => (
               <motion.div
                 key={i}
@@ -285,6 +346,108 @@ export default function Landing() {
                 </div>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Detailed Model Evaluation */}
+      <section id="model-evaluation" className="py-24 px-6 relative z-10">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <span className="text-indigo-400 font-bold tracking-widest text-xs uppercase mb-3 block">Evaluation Metrics</span>
+            <h2 className="text-3xl md:text-5xl font-bold mb-4">Final Model Performance</h2>
+            <p className="text-slate-400 max-w-2xl mx-auto text-sm md:text-base">Measured results across baseline and ensemble models, showing why the blended forecasting path is the production default for dependable electricity-demand prediction.</p>
+          </div>
+
+          <div className="mb-16 overflow-x-auto">
+            <table className="w-full text-left border-collapse glass-panel rounded-2xl overflow-hidden shadow-2xl">
+              <thead>
+                <tr className="bg-indigo-900/40 text-indigo-300 text-sm uppercase tracking-widest">
+                  <th className="p-6 font-bold border-b border-white/10">Model</th>
+                  <th className="p-6 font-bold border-b border-white/10 text-right">MAE</th>
+                  <th className="p-6 font-bold border-b border-white/10 text-right">RMSE</th>
+                  <th className="p-6 font-bold border-b border-white/10 text-right">R²</th>
+                  <th className="p-6 font-bold border-b border-white/10 text-right">MAPE (%)</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-300">
+                <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <td className="p-6 font-semibold">Ridge Regression</td>
+                  <td className="p-6 text-right font-mono">850.80</td>
+                  <td className="p-6 text-right font-mono">1141.82</td>
+                  <td className="p-6 text-right font-mono">0.99</td>
+                  <td className="p-6 text-right font-mono">1.59</td>
+                </tr>
+                <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <td className="p-6 font-semibold">XGBoost</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">206.17</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">313.58</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">1.00</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">0.42</td>
+                </tr>
+                <tr className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <td className="p-6 font-semibold">LightGBM</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">202.05</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">300.67</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">1.00</td>
+                  <td className="p-6 text-right font-mono text-emerald-400">0.40</td>
+                </tr>
+                <tr className="bg-indigo-900/20 hover:bg-indigo-900/30 transition-colors">
+                  <td className="p-6 font-bold text-white flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+                    Stacking Ensemble (LGB 60% + XGB 40%)
+                  </td>
+                  <td className="p-6 text-right font-mono font-bold text-white">187.23</td>
+                  <td className="p-6 text-right font-mono font-bold text-white">284.67</td>
+                  <td className="p-6 text-right font-mono font-bold text-white">1.00</td>
+                  <td className="p-6 text-right font-mono font-bold text-white">0.37</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="glass-panel border border-indigo-500/20 rounded-2xl p-8 mb-16 text-center max-w-3xl mx-auto bg-gradient-to-br from-indigo-900/20 to-slate-900/40">
+            <h4 className="text-indigo-400 font-bold uppercase tracking-widest text-sm mb-4">CV LightGBM (5-fold TimeSeriesSplit)</h4>
+            <div className="flex flex-col sm:flex-row justify-center gap-8 md:gap-16">
+              <div>
+                <div className="text-3xl font-black text-white mb-1">400.1 <span className="text-lg text-slate-400">± 544.3 MW</span></div>
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Mean Absolute Error</div>
+              </div>
+              <div>
+                <div className="text-3xl font-black text-white mb-1">0.7836 <span className="text-lg text-slate-400">± 0.4291</span></div>
+                <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">R² Score</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="glass-panel rounded-2xl p-4 border border-white/5 hover:border-indigo-500/30 transition-colors group">
+              <div className="relative overflow-hidden rounded-xl aspect-video bg-white/90 flex items-center justify-center p-2">
+                <img src={plotActualVsPredicted} alt="Actual vs Predicted" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+              </div>
+              <h3 className="text-center font-bold text-slate-300 mt-4 mb-2">Actual vs Predicted Load</h3>
+            </div>
+            
+            <div className="glass-panel rounded-2xl p-4 border border-white/5 hover:border-indigo-500/30 transition-colors group">
+              <div className="relative overflow-hidden rounded-xl aspect-video bg-white/90 flex items-center justify-center p-2">
+                <img src={plotFeatureImportance} alt="Feature Importance" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+              </div>
+              <h3 className="text-center font-bold text-slate-300 mt-4 mb-2">Feature Importance</h3>
+            </div>
+            
+            <div className="glass-panel rounded-2xl p-4 border border-white/5 hover:border-indigo-500/30 transition-colors group">
+              <div className="relative overflow-hidden rounded-xl aspect-video bg-white/90 flex items-center justify-center p-2">
+                <img src={plotErrorByHour} alt="Error By Hour" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+              </div>
+              <h3 className="text-center font-bold text-slate-300 mt-4 mb-2">Prediction Error by Hour</h3>
+            </div>
+            
+            <div className="glass-panel rounded-2xl p-4 border border-white/5 hover:border-indigo-500/30 transition-colors group">
+              <div className="relative overflow-hidden rounded-xl aspect-video bg-white/90 flex items-center justify-center p-2">
+                <img src={plotResiduals} alt="Residuals Plot" className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" />
+              </div>
+              <h3 className="text-center font-bold text-slate-300 mt-4 mb-2">Residual Analysis</h3>
+            </div>
           </div>
         </div>
       </section>
@@ -388,6 +551,15 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
+      <section className="py-20 px-6 relative z-10">
+        <div className="max-w-5xl mx-auto rounded-[2rem] border border-emerald-400/15 bg-gradient-to-br from-emerald-500/10 via-slate-900/80 to-cyan-500/10 p-8 md:p-12 text-center shadow-2xl">
+          <h2 className="text-3xl md:text-5xl font-black text-white mb-6">Built Like the Future It Supports</h2>
+          <p className="text-slate-200 text-base md:text-xl leading-relaxed">
+            LoadIQ is not just a forecasting tool. It is a piece of smart engineering that treats compute and carbon with equal respect - because a platform built to promote eco-friendly energy should itself be built that way.
+          </p>
+        </div>
+      </section>
+
       <footer className="relative z-10 bg-[#080B14] border-t border-white/5 py-12 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
           <div className="flex flex-col items-center md:items-start gap-4">

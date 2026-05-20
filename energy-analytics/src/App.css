@@ -36,3 +36,98 @@
     transform: rotate(360deg);
   }
 }
+
+/* Smooth input animations */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="range"],
+select,
+textarea {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+input[type="range"]:hover,
+input[type="range"]:focus {
+  transform: scale(1.02);
+}
+
+/* Glass panel smooth transitions */
+.glass-panel {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(12px);
+}
+
+.glass-panel:hover {
+  backdrop-filter: blur(16px);
+}
+
+.glass-input {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-input:focus {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.2);
+}
+
+/* Smooth button transitions */
+button {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Navy card smooth animations */
+.navy-card {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.8), rgba(30, 41, 59, 0.6));
+}
+
+@media (hover: hover) and (pointer: fine) {
+.navy-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+}
+
+/* Smooth navigation transitions */
+nav,
+.sidebar {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth link transitions */
+a {
+  transition: all 0.3s ease;
+}
+
+/* Smooth chart animations */
+svg {
+  transition: opacity 0.3s ease;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -1,4 +1,4 @@
-import { API_CONFIG, buildUrl, fetchWithRetry } from '../config/api';
+import { API_CONFIG, buildModel1Url, buildModel2Url, fetchWithRetry } from '../config/api';
 
 export const AnalyticsService = {
   extractPredictionItem: (item, defaultSource = 'ml_model') => {
@@ -27,11 +27,30 @@ export const AnalyticsService = {
     return AnalyticsService.extractPredictionItem(item).value;
   },
 
+  getPredictionItems: (response) => {
+    const candidates = [
+      response?.predictions,
+      response?.forecast,
+      response?.forecasts,
+      response?.predicted_loads,
+      response?.predicted_load_mw,
+      response?.predicted_load
+    ];
+
+    const predictionList = candidates.find((candidate) => Array.isArray(candidate));
+    if (predictionList) {
+      return predictionList;
+    }
+
+    const singleValue = candidates.find((candidate) => Number.isFinite(Number(candidate)));
+    return singleValue === undefined ? [] : [singleValue];
+  },
+
   normalizePredictionResponse: (response) => {
     const defaultSource = response?.prediction_source || 'ml_model';
-    const predictions = Array.isArray(response?.predictions)
-      ? response.predictions.map((item) => AnalyticsService.extractPredictionItem(item, defaultSource))
-      : [];
+    const predictions = AnalyticsService.getPredictionItems(response)
+      .map((item) => AnalyticsService.extractPredictionItem(item, defaultSource))
+      .filter((item) => Number.isFinite(item.value));
 
     return {
       ...response,
@@ -112,20 +131,23 @@ export const AnalyticsService = {
 
   /**
    * Fetch batch predictions or iterative horizon forecasts.
+   * Uses MODEL2_API for batch forecasting
    */
   getBatchPredictions: async ({ last24Hours, horizon, loads, scenarios }) => {
     try {
       const payload = last24Hours
         ? {
+            model: 'ensemble',
             last_24_hours: last24Hours,
             horizon
           }
         : {
+            model: 'ensemble',
             loads: loads || scenarios || []
           };
 
       const response = await fetchWithRetry(
-        buildUrl(API_CONFIG.ENDPOINTS.PREDICT_BATCH),
+        buildModel2Url(API_CONFIG.ENDPOINTS.PREDICT_BATCH),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -142,8 +164,11 @@ export const AnalyticsService = {
       const responsePayload = await response.json();
       return AnalyticsService.normalizePredictionResponse(responsePayload);
     } catch (error) {
-      console.error('Batch prediction error:', error);
-      const shouldFallback = !error.message.startsWith('Client error:');
+      console.warn('Batch prediction fallback used:', error);
+      const shouldFallback =
+        !error.message.startsWith('Client error:') ||
+        error.message.startsWith('Client error: 404') ||
+        error.message.startsWith('Client error: 405');
 
       if (shouldFallback) {
         return AnalyticsService.normalizePredictionResponse(
@@ -165,7 +190,7 @@ export const AnalyticsService = {
     try {
       const now = new Date();
       const response = await fetchWithRetry(
-        buildUrl(API_CONFIG.ENDPOINTS.PREDICT),
+        buildModel1Url(API_CONFIG.ENDPOINTS.PREDICT),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -188,8 +213,12 @@ export const AnalyticsService = {
       const payload = await response.json();
       return AnalyticsService.extractPredictionItem(payload).value;
     } catch (error) {
-      console.error('Single prediction error:', error);
-      if (!error.message.startsWith('Client error:')) {
+      console.warn('Single prediction fallback used:', error);
+      if (
+        !error.message.startsWith('Client error:') ||
+        error.message.startsWith('Client error: 404') ||
+        error.message.startsWith('Client error: 405')
+      ) {
         return AnalyticsService.buildLocalPredictionValue(last24Hours);
       }
       throw error;

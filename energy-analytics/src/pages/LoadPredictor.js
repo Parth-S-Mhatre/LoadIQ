@@ -15,6 +15,7 @@ import useBackendHealth from '../hooks/useBackendHealth';
 import { useAuth } from '../context/AuthContext';
 import { useDisclaimer } from '../context/DisclaimerContext';
 import { AnalyticsService } from '../services/AnalyticsService';
+import { UserHistoryService } from '../services/UserHistoryService';
 
 const ThreeLoadChart = lazy(() => import('../components/3d/ThreeLoadChart'));
 
@@ -140,10 +141,72 @@ const LoadPredictor = () => {
       horizon: forecastHorizon
     });
 
-    return Array.isArray(response?.predictions)
+    const predictionValues = Array.isArray(response?.predictions)
       ? response.predictions.map((item) => item.value).filter(Number.isFinite)
       : [];
+
+    return {
+      response,
+      predictionValues
+    };
   }, [forecastHorizon, historicalLoads]);
+
+  const buildPredictionRecord = useCallback((predictionResponse, resolvedPredictions) => {
+    const allLoads = [...historicalLoads, ...resolvedPredictions];
+    const average = allLoads.reduce((sum, value) => sum + value, 0) / Math.max(allLoads.length, 1);
+    const peak = Math.max(...allLoads);
+    const minimum = Math.min(...historicalLoads);
+    const lastActual = historicalLoads[historicalLoads.length - 1] || 0;
+    const firstPrediction = resolvedPredictions[0] ?? null;
+    const delta = firstPrediction !== null ? firstPrediction - lastActual : 0;
+
+    return {
+      timestamp: new Date().toISOString(),
+      type: 'prediction',
+      model: 'ensemble',
+      forecastHorizon,
+      historicalLoads,
+      predictions: resolvedPredictions,
+      predictionSource: predictionResponse?.prediction_source || 'ml_model',
+      fallbackUsed: Boolean(predictionResponse?.fallback_used),
+      fallbackReason: predictionResponse?.reason || null,
+      latestPrediction: resolvedPredictions[resolvedPredictions.length - 1] ?? null,
+      nextHourPrediction: firstPrediction,
+      average: Number(average.toFixed(2)),
+      peak: Number(peak.toFixed(2)),
+      minimum: Number(minimum.toFixed(2)),
+      lastActual: Number(lastActual.toFixed(2)),
+      firstPrediction: firstPrediction !== null ? Number(firstPrediction.toFixed(2)) : null,
+      delta: Number(delta.toFixed(2)),
+      direction: delta > 0 ? 'up' : delta < 0 ? 'down' : 'stable'
+    };
+  }, [forecastHorizon, historicalLoads]);
+
+  const savePredictionHistory = useCallback(async (predictionRecord) => {
+    const historyKey = `analyticsHistory_${user?.uid || 'guest'}`;
+    const savedProfile = user?.uid
+      ? JSON.parse(localStorage.getItem(`userProfile_${user.uid}`) || 'null')
+      : null;
+    const recordWithWorkspace = {
+      ...predictionRecord,
+      workspaceName: savedProfile?.workspaceName || '',
+      organization: savedProfile?.organization || ''
+    };
+    localStorage.setItem('loadiq_latest_prediction_context', JSON.stringify(recordWithWorkspace));
+    const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
+    existingHistory.unshift(recordWithWorkspace);
+    localStorage.setItem(historyKey, JSON.stringify(existingHistory.slice(0, 50)));
+
+    if (!user?.uid) {
+      return;
+    }
+
+    try {
+      await UserHistoryService.savePrediction(user.uid, recordWithWorkspace);
+    } catch (storageError) {
+      console.error('Failed to persist prediction history:', storageError);
+    }
+  }, [user?.uid]);
 
   const runPrediction = async () => {
     animationRunRef.current += 1;
@@ -153,27 +216,14 @@ const LoadPredictor = () => {
     setPredictions([]);
 
     try {
-      const resolvedPredictions = await fetchPredictionSeries();
-      const newPreds = await animatePredictions(resolvedPredictions, currentAnimationRun);
+      const { response, predictionValues } = await fetchPredictionSeries();
+      const newPreds = await animatePredictions(predictionValues, currentAnimationRun);
 
       if (!newPreds || !newPreds.length) {
         return;
       }
 
-      // Save to analytics history in localStorage
-      const historyItem = {
-        timestamp: new Date().toISOString(),
-        prediction: newPreds[newPreds.length - 1],
-        forecastHorizon,
-        inputData: historicalLoads
-      };
-
-      const existingHistory = JSON.parse(localStorage.getItem(`analyticsHistory_${user?.uid}`) || '[]');
-      existingHistory.unshift(historyItem);
-      localStorage.setItem(`analyticsHistory_${user?.uid}`, JSON.stringify(existingHistory.slice(0, 50))); // Keep last 50
-
-      // NoSQL disabled: keep history in localStorage only.
-
+      await savePredictionHistory(buildPredictionRecord(response, newPreds));
     } catch (err) {
       console.error(err);
       setError(err.message.includes('fetch')

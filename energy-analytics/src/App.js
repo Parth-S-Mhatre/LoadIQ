@@ -7,6 +7,7 @@ import RouteSkeletonGate from "./components/RouteSkeletonGate";
 import LandingSkeleton from "./skeleton_pages/LandingSkeleton";
 import AuthSkeleton from "./skeleton_pages/AuthSkeleton";
 import DashboardSkeleton from "./skeleton_pages/DashboardSkeleton";
+import EnergyChatbot from './components/EnergyChatbot';
 import ProfileSkeleton from "./skeleton_pages/ProfileSkeleton";
 
 const Landing = lazy(() => import("./pages/Landing"));
@@ -59,6 +60,7 @@ function App() {
             element={<RouteSkeletonGate component={NotFound} skeleton={LandingSkeleton} />}
           />
         </Routes>
+        <EnergyChatbot />
       </Router>
       </DisclaimerProvider>
     </AuthProvider>
