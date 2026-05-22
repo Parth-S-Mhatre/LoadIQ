@@ -196,7 +196,7 @@ Hosted on Firebase Hosting. The frontend is always live. For full prediction fun
 ## 👨‍💻 Developer
 
 **Parth Sanjay Mhatre**
-Pillai College of Engineering, Mumbai University — Semester 6
+
 
 ---
 
