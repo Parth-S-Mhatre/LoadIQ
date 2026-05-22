@@ -27,34 +27,57 @@ Deployed on Firebase Hosting. Always available. For live predictions, the backen
 
 ```
 energy-analytics/
-├── public/
-│   └── index.html
-├── src/
-│   ├── components/
-│   │   ├── Dashboard.js          # Main dashboard with load charts
-│   │   ├── EnergyChatbot.js      # AI chatbot UI component
-│   │   ├── Globe.js              # Three.js WebGL interactive globe
-│   │   └── SkeletonLoader.js     # Skeleton screen components
-│   │
-│   ├── services/
-│   │   ├── api.js                # Unified API layer, fetch helpers, WebGL recovery
-│   │   ├── ChatbotService.js     # Gemini 2.0 Flash integration
-│   │   └── AnalyticsService.js   # Telemetry, batch predictions, overview data
-│   │
-│   ├── pages/                    # Route-level page components (lazy loaded)
-│   │   ├── HomePage.js
-│   │   ├── AnalyticsPage.js
-│   │   ├── ForecastPage.js
-│   │   └── InsightsPage.js
-│   │
-│   ├── index.tsx                 # App entry point
-│   └── App.tsx                   # Router + global layout
+├── public/                         # Static assets served as-is
 │
-├── .env                          # Environment variables (never commit)
-├── .env.example                  # Template for environment setup
+├── src/
+│   ├── components/                 # Reusable UI components
+│   │   ├── charts/                 # Load curve, forecast, analytics charts
+│   │   ├── chatbot/                # AI chatbot UI (EnergyChatbot.js)
+│   │   ├── globe/                  # Three.js WebGL interactive globe
+│   │   ├── dashboard/              # Dashboard cards and widgets
+│   │   └── shared/                 # Buttons, modals, loaders etc.
+│   │
+│   ├── config/                     # App-wide config (API URLs, constants)
+│   │
+│   ├── context/                    # React Context providers (global state)
+│   │
+│   ├── hooks/                      # Custom React hooks (usePrediction, useChat etc.)
+│   │
+│   ├── pages/                      # ← Route-level pages (lazy loaded)
+│   │   ├── HomePage.js             # Landing / overview page
+│   │   ├── AnalyticsPage.js        # Detailed analytics and charts
+│   │   ├── ForecastPage.js         # Load forecasting with batch predictions
+│   │   ├── InsightsPage.js         # Country insights and pattern comparisons
+│   │   └── [other pages]/          # Additional route pages
+│   │
+│   ├── services/                   # API and external service integrations
+│   │   ├── api.js                  # Unified fetch layer, connection guard, WebGL recovery
+│   │   ├── ChatbotService.js       # Gemini 2.0 Flash AI chatbot
+│   │   └── AnalyticsService.js     # Telemetry, batch predictions, overview data
+│   │
+│   ├── skeleton_pages/             # ← Skeleton screen versions of every page
+│   │   ├── HomePageSkeleton.js     # Shown while HomePage data loads
+│   │   ├── AnalyticsSkeleton.js    # Shown while analytics charts load
+│   │   ├── ForecastSkeleton.js     # Shown while forecast data loads
+│   │   └── InsightsSkeleton.js     # Shown while insights data loads
+│   │
+│   ├── utils/                      # Helper functions (formatters, date utils etc.)
+│   │
+│   ├── App.css                     # Global styles
+│   ├── App.tsx                     # Router + layout + lazy loading setup
+│   └── index.tsx                   # React entry point
+│
+├── .env                            # Environment variables (never commit)
+├── .env.example                    # Template for team setup
 ├── package.json
-└── README.md                     # This file
+└── README.md                       # This file
 ```
+
+> **Key folders to know:**
+> - `pages/` — one file per route, all lazy-loaded via `React.lazy()`
+> - `skeleton_pages/` — matching skeleton for every page in `pages/` — renders instantly before data arrives
+> - `hooks/` — reusable data-fetching and state logic extracted from components
+> - `context/` — global state (selected country, theme, current predictions)
 
 ---
 
@@ -234,20 +257,34 @@ const ForecastPage  = React.lazy(() => import('./pages/ForecastPage'));
 
 ### Skeleton-first UI
 
-Every backend-dependent page renders a skeleton screen immediately on mount, then replaces it with real data when the API responds. The interface never shows a blank page.
+Every page in `pages/` has a matching skeleton in `skeleton_pages/`. The skeleton renders immediately on mount — the user never sees a blank screen while API data loads.
 
 ```js
-const [loading, setLoading] = useState(true);
-const [data, setData]       = useState(null);
+// App.tsx — lazy load pages, show skeleton while loading
+const HomePage     = React.lazy(() => import('./pages/HomePage'));
+const AnalyticsPage = React.lazy(() => import('./pages/AnalyticsPage'));
+const ForecastPage  = React.lazy(() => import('./pages/ForecastPage'));
 
-useEffect(() => {
-  API.predictLoad(payload).then(result => {
-    setData(result);
-    setLoading(false);
-  });
-}, []);
+// Skeleton imports (not lazy — they're tiny and load instantly)
+import HomePageSkeleton    from './skeleton_pages/HomePageSkeleton';
+import AnalyticsSkeleton   from './skeleton_pages/AnalyticsSkeleton';
+import ForecastSkeleton    from './skeleton_pages/ForecastSkeleton';
 
-return loading ? <SkeletonLoader /> : <Dashboard data={data} />;
+<Suspense fallback={<HomePageSkeleton />}>
+  <Routes>
+    <Route path="/"          element={<HomePage />} />
+    <Route path="/analytics" element={
+      <Suspense fallback={<AnalyticsSkeleton />}>
+        <AnalyticsPage />
+      </Suspense>
+    } />
+    <Route path="/forecast"  element={
+      <Suspense fallback={<ForecastSkeleton />}>
+        <ForecastPage />
+      </Suspense>
+    } />
+  </Routes>
+</Suspense>
 ```
 
 ---
