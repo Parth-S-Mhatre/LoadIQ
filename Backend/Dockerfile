@@ -3,6 +3,7 @@ FROM python:3.11-slim
 
 # Set working directory
 WORKDIR /app
+ENV MPLCONFIGDIR=/tmp/matplotlib
 
 # Install runtime libs required by LightGBM/XGBoost
 RUN apt-get update \
@@ -23,4 +24,4 @@ EXPOSE 8000
 
 # Run the app
 # Use JSON form and shell expansion for dynamic PORT.
-CMD ["sh", "-c", "uvicorn Model2:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
