@@ -35,6 +35,8 @@ serviceAccountKey.json
 *.pem
 *.key
 google-credentials.json
+.env*
+*.env*
 
 # IDE
 .vscode/
