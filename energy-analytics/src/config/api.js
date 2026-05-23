@@ -18,7 +18,7 @@ const resolveBaseUrl = () => {
     }
 
     if (isLocalHost() && shouldUseLocalModelApis()) {
-        return 'http://127.0.0.1:8002';
+        return 'http://127.0.0.1:8000';
     }
 
     return 'https://loadiq.onrender.com';
@@ -29,11 +29,7 @@ const resolveModel1Url = () => {
         return trimTrailingSlash(process.env.REACT_APP_MODEL1_API);
     }
 
-    if (isLocalHost() && shouldUseLocalModelApis()) {
-        return 'http://127.0.0.1:8001';
-    }
-
-    return 'https://loadiq-model1-production.up.railway.app';
+    return `${resolveBaseUrl()}/model1`;
 };
 
 const resolveModel2Url = () => {
@@ -41,11 +37,7 @@ const resolveModel2Url = () => {
         return trimTrailingSlash(process.env.REACT_APP_MODEL2_API);
     }
 
-    if (isLocalHost() && shouldUseLocalModelApis()) {
-        return 'http://127.0.0.1:8002';
-    }
-
-    return 'https://loadiq-model2-production.up.railway.app';
+    return `${resolveBaseUrl()}/model2`;
 };
 
 export const API_CONFIG = {

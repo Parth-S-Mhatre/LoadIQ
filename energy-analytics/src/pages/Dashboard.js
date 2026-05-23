@@ -297,7 +297,6 @@ const OverviewPage = () => {
 };
 
 const PredictorInputForm = () => {
-  const [activeModel, setActiveModel] = useState('model1');
   const [formData, setFormData] = useState({
     hour: new Date().getHours(),
     day_of_week: new Date().getDay() || 7,
@@ -1024,7 +1023,7 @@ const Dashboard = () => {
   };
 
   const ToastNotifications = () => (
-    <div className="fixed top-6 right-6 z-[200] space-y-4 max-w-sm">
+      <div className="fixed left-4 right-4 top-4 z-[200] space-y-4 sm:left-auto sm:right-6 sm:top-6 sm:max-w-sm">
       <AnimatePresence>
         {notifications.map(n => (
           <motion.div
@@ -1112,7 +1111,7 @@ const Dashboard = () => {
           </nav>
         </aside>
 
-        <main className="md:ml-24 p-4 sm:p-6 md:p-8 lg:p-10 pb-32 md:pb-12 min-h-screen">
+        <main className="min-w-0 md:ml-24 p-4 sm:p-6 md:p-8 lg:p-10 pb-32 md:pb-12 min-h-screen">
           {/* Header */}
           <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-6 text-white">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full xl:w-auto">

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { jsPDF } from 'jspdf';
 import {
   User,
   Settings,
@@ -50,6 +51,21 @@ const getStoredDate = (value) => {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+};
+
+const isOfflineFirestoreError = (error) => {
+  return error?.code === 'unavailable' || String(error?.message || '').toLowerCase().includes('client is offline');
+};
+
+const FIREBASE_SAVE_TIMEOUT_MS = 4500;
+
+const withTimeout = (promise, timeoutMs, message) => {
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
 };
 
 const normalizePredictionSeries = (item) => {
@@ -126,6 +142,7 @@ const UserProfile = () => {
   const [activeTab, setActiveTab] = useState('profile');
   const [notifications, setNotifications] = useState([]);
   const [inviteContext, setInviteContext] = useState(null);
+  const [saveDoneMessage, setSaveDoneMessage] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -179,6 +196,38 @@ const UserProfile = () => {
       isMounted = false;
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      return undefined;
+    }
+
+    const syncPendingProfile = async () => {
+      const pendingProfile = JSON.parse(localStorage.getItem(`pendingUserProfileSync_${user.uid}`) || 'null');
+      if (!pendingProfile) {
+        return;
+      }
+
+      try {
+        await withTimeout(
+          UserHistoryService.saveUserProfile(user.uid, pendingProfile),
+          FIREBASE_SAVE_TIMEOUT_MS,
+          'Firebase sync timed out.'
+        );
+        localStorage.removeItem(`pendingUserProfileSync_${user.uid}`);
+        addNotification('Profile synced to Firebase.', 'success');
+      } catch (error) {
+        const isExpectedSyncDelay = isOfflineFirestoreError(error) || String(error?.message || '').includes('Firebase sync timed out');
+        if (!isExpectedSyncDelay) {
+          console.error('Failed to sync pending profile:', error);
+        }
+      }
+    };
+
+    syncPendingProfile();
+    window.addEventListener('online', syncPendingProfile);
+    return () => window.removeEventListener('online', syncPendingProfile);
+  }, [user?.uid]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -244,6 +293,13 @@ const UserProfile = () => {
     setTimeout(() => setNotifications((prev) => prev.filter((entry) => entry.id !== id)), 5000);
   };
 
+  const playSaveDoneAnimation = (message = 'Profile saved') => {
+    setSaveDoneMessage(message);
+    setTimeout(() => setSaveDoneMessage(''), 1400);
+  };
+
+  const waitForDoneAnimation = () => new Promise((resolve) => setTimeout(resolve, 850));
+
   const saveProfile = async () => {
     if (!user?.uid) {
       return;
@@ -252,19 +308,51 @@ const UserProfile = () => {
     setIsLoading(true);
 
     try {
-      localStorage.setItem(`userProfile_${user.uid}`, JSON.stringify(formData));
-      await UserHistoryService.saveUserProfile(user.uid, formData);
+      const profileToStore = {
+        ...formData,
+        uid: user.uid,
+        userId: user.uid
+      };
+
+      localStorage.setItem(`userProfile_${user.uid}`, JSON.stringify(profileToStore));
+      await withTimeout(
+        UserHistoryService.saveUserProfile(user.uid, formData),
+        FIREBASE_SAVE_TIMEOUT_MS,
+        'Firebase save timed out.'
+      );
+      localStorage.removeItem(`pendingUserProfileSync_${user.uid}`);
       localStorage.removeItem('pendingInviteContext');
       setInviteContext(null);
       setIsNewUser(false);
+      playSaveDoneAnimation('Profile saved');
       addNotification('Profile and workspace settings saved.', 'success');
 
       if (isNewUser) {
+        await waitForDoneAnimation();
         navigate('/dashboard');
       }
     } catch (error) {
-      console.error('Failed to save profile:', error);
-      addNotification('Failed to save profile settings.', 'error');
+      if (isOfflineFirestoreError(error) || String(error?.message || '').includes('Firebase save timed out')) {
+        localStorage.setItem(`pendingUserProfileSync_${user.uid}`, JSON.stringify({
+          ...formData,
+          uid: user.uid,
+          userId: user.uid,
+          pendingAt: new Date().toISOString()
+        }));
+        localStorage.removeItem('pendingInviteContext');
+        setInviteContext(null);
+        setIsNewUser(false);
+        playSaveDoneAnimation('Saved locally');
+        addNotification('Saved locally. Firebase is offline, so it will need to sync when the connection returns.', 'info');
+
+        if (isNewUser) {
+          await waitForDoneAnimation();
+          navigate('/dashboard');
+        }
+      } else {
+        console.error('Failed to save profile:', error);
+        addNotification('Failed to save profile settings.', 'error');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -288,16 +376,112 @@ const UserProfile = () => {
 
   const exportHistory = () => {
     try {
-      const blob = new Blob([JSON.stringify(analyticsHistory, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `loadiq_history_${user?.uid || 'guest'}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      addNotification('Analytics history exported.', 'success');
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 42;
+      let y = 48;
+
+      const addText = (text, x, size = 10, style = 'normal', color = [30, 41, 59]) => {
+        doc.setFont('helvetica', style);
+        doc.setFontSize(size);
+        doc.setTextColor(...color);
+        doc.text(String(text), x, y);
+      };
+
+      const ensureSpace = (height = 36) => {
+        if (y + height <= pageHeight - margin) {
+          return;
+        }
+
+        doc.addPage();
+        y = margin;
+      };
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, pageWidth, 96, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.text('LoadIQ Forecast History Report', margin, y);
+      y += 24;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(203, 213, 225);
+      doc.text(`Generated ${new Date().toLocaleString()}`, margin, y);
+      y = 126;
+
+      addText('Workspace Summary', margin, 14, 'bold', [15, 23, 42]);
+      y += 24;
+      const summaryRows = [
+        ['Analyst', formData.fullName || user?.displayName || 'Not set'],
+        ['Email', formData.email || user?.email || 'Not set'],
+        ['Workspace', formData.workspaceName || 'Not set'],
+        ['Organization', formData.organization || 'Not set'],
+        ['Total runs', analyticsSummary.totalRuns],
+        ['Latest prediction', `${Math.round(analyticsSummary.latestPrediction).toLocaleString()} MW`],
+        ['Average next hour', `${Math.round(analyticsSummary.averageNextHour).toLocaleString()} MW`],
+        ['Fallback rate', `${analyticsSummary.fallbackRate.toFixed(0)}%`]
+      ];
+
+      summaryRows.forEach(([label, value]) => {
+        ensureSpace(24);
+        addText(label, margin, 9, 'bold', [71, 85, 105]);
+        addText(value, margin + 150, 10, 'normal', [15, 23, 42]);
+        y += 20;
+      });
+
+      y += 18;
+      addText('Forecast Sessions', margin, 14, 'bold', [15, 23, 42]);
+      y += 24;
+
+      if (!analyticsHistory.length) {
+        addText('No analytics history has been saved yet.', margin, 10, 'normal', [71, 85, 105]);
+      }
+
+      analyticsHistory.forEach((item, index) => {
+        ensureSpace(120);
+        doc.setDrawColor(226, 232, 240);
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(margin, y - 14, pageWidth - margin * 2, 100, 8, 8, 'FD');
+
+        addText(`Session ${index + 1}`, margin + 16, 11, 'bold', [15, 23, 42]);
+        addText(new Date(item.timestamp).toLocaleString(), margin + 110, 9, 'normal', [71, 85, 105]);
+        y += 22;
+
+        const sessionLines = [
+          `Horizon: ${item.forecastHorizon}h`,
+          `Source: ${item.predictionSource}`,
+          `Next hour: ${Math.round(item.nextHourPrediction).toLocaleString()} MW`,
+          `Latest step: ${Math.round(item.latestPrediction).toLocaleString()} MW`,
+          `Peak: ${Math.round(item.statistics.peak || 0).toLocaleString()} MW`,
+          `Delta: ${Math.round(item.statistics.delta || 0).toLocaleString()} MW`
+        ];
+
+        const wrapped = doc.splitTextToSize(sessionLines.join('  |  '), pageWidth - margin * 2 - 32);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(51, 65, 85);
+        doc.text(wrapped, margin + 16, y);
+        y += wrapped.length * 12 + 20;
+
+        if (item.predictionSeries.length) {
+          const seriesPreview = item.predictionSeries
+            .slice(0, 8)
+            .map((entry) => `+${entry.step}h ${Math.round(entry.value).toLocaleString()} MW`)
+            .join(', ');
+          const seriesWrapped = doc.splitTextToSize(`Series: ${seriesPreview}`, pageWidth - margin * 2 - 32);
+          doc.text(seriesWrapped, margin + 16, y);
+        }
+
+        y += 58;
+      });
+
+      doc.save(`loadiq_history_${user?.uid || 'guest'}.pdf`);
+      addNotification('Analytics history PDF exported.', 'success');
     } catch (error) {
-      addNotification('Failed to export analytics history.', 'error');
+      console.error('Failed to export PDF history:', error);
+      addNotification('Failed to export analytics history PDF.', 'error');
     }
   };
 
@@ -338,15 +522,59 @@ const UserProfile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <AnimatePresence>
+        {saveDoneMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 backdrop-blur-sm px-6"
+          >
+            <motion.div
+              initial={{ scale: 0.82, y: 18 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: -8 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+              className="w-full max-w-sm rounded-3xl border border-emerald-400/30 bg-slate-900/95 p-8 text-center shadow-2xl shadow-emerald-500/10"
+            >
+              <motion.div
+                initial={{ scale: 0, rotate: -18 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 16, delay: 0.08 }}
+                className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-400/25"
+              >
+                <CheckCircle size={42} strokeWidth={2.5} />
+              </motion.div>
+              <motion.h2
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.16 }}
+                className="text-2xl font-black text-white"
+              >
+                {saveDoneMessage}
+              </motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.24 }}
+                className="mt-2 text-sm text-slate-300"
+              >
+                Your workspace details are ready.
+              </motion.p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="bg-slate-900/60 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-cyan-500 via-indigo-500 to-sky-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
                 <Sparkles className="text-white" size={24} />
               </div>
               <div>
-                <h1 className="text-3xl font-black text-white">Analysis Workspace</h1>
+                <h1 className="text-2xl sm:text-3xl font-black text-white">Analysis Workspace</h1>
                 <p className="text-slate-400 text-sm">
                   Profile, forecasting history, and collaboration settings in one place.
                 </p>
@@ -362,22 +590,22 @@ const UserProfile = () => {
                 Back to Dashboard
               </button>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
               <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
                 <p className="text-[11px] uppercase tracking-widest text-slate-500">Runs</p>
-                <p className="text-2xl font-black text-white">{analyticsSummary.totalRuns}</p>
+                <p className="text-xl sm:text-2xl font-black text-white">{analyticsSummary.totalRuns}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
                 <p className="text-[11px] uppercase tracking-widest text-slate-500">Latest</p>
-                <p className="text-2xl font-black text-white">{Math.round(analyticsSummary.latestPrediction).toLocaleString()}</p>
+                <p className="text-xl sm:text-2xl font-black text-white">{Math.round(analyticsSummary.latestPrediction).toLocaleString()}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
                 <p className="text-[11px] uppercase tracking-widest text-slate-500">Avg Next Hour</p>
-                <p className="text-2xl font-black text-white">{Math.round(analyticsSummary.averageNextHour).toLocaleString()}</p>
+                <p className="text-xl sm:text-2xl font-black text-white">{Math.round(analyticsSummary.averageNextHour).toLocaleString()}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
                 <p className="text-[11px] uppercase tracking-widest text-slate-500">Fallback Rate</p>
-                <p className="text-2xl font-black text-white">{analyticsSummary.fallbackRate.toFixed(0)}%</p>
+                <p className="text-xl sm:text-2xl font-black text-white">{analyticsSummary.fallbackRate.toFixed(0)}%</p>
               </div>
               </div>
             </div>
@@ -385,20 +613,20 @@ const UserProfile = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="flex flex-wrap gap-2 mb-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="mb-8 flex gap-2 overflow-x-auto pb-2 no-scrollbar sm:flex-wrap">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-3 px-5 py-3 rounded-xl transition-all ${
+              className={`flex shrink-0 items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 rounded-xl transition-all ${
                 activeTab === tab.id
                   ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
                   : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/60'
               }`}
             >
               <tab.icon size={18} />
-              <span className="font-semibold">{tab.label}</span>
+              <span className="font-semibold whitespace-nowrap">{tab.label}</span>
             </button>
           ))}
         </div>
@@ -438,7 +666,7 @@ const UserProfile = () => {
               )}
 
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2 rounded-3xl border border-white/10 bg-slate-900/65 p-6">
+                <div className="xl:col-span-2 rounded-3xl border border-white/10 bg-slate-900/65 p-4 sm:p-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">Full Name *</label>
@@ -532,7 +760,7 @@ const UserProfile = () => {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-6 space-y-5">
+                <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-4 sm:p-6 space-y-5">
                   <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-2">Workspace Snapshot</p>
                     <h3 className="text-2xl font-black text-white">
@@ -542,7 +770,7 @@ const UserProfile = () => {
                       Keep profile details, history, and collaboration context aligned for repeat analysis sessions.
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
                       <Building2 className="text-cyan-300 mb-3" size={18} />
                       <p className="text-xs uppercase tracking-wider text-slate-500">Org</p>
@@ -634,7 +862,7 @@ const UserProfile = () => {
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-full lg:min-w-[420px]">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 min-w-0 lg:min-w-[420px]">
                           <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
                             <p className="text-xs uppercase tracking-wider text-slate-500">Next Hour</p>
                             <p className="text-white font-bold mt-2">{Math.round(item.nextHourPrediction).toLocaleString()} MW</p>

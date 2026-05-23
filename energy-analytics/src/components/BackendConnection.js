@@ -120,7 +120,7 @@ const BackendConnection = ({ onConnectionChange }) => {
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: -20 }}
-        className={`fixed top-4 right-4 z-50 max-w-sm ${statusConfig.bgColor} backdrop-blur-xl border ${statusConfig.borderColor} rounded-2xl p-6 shadow-2xl`}
+        className={`fixed top-4 left-4 right-4 sm:left-auto z-50 sm:max-w-sm ${statusConfig.bgColor} backdrop-blur-xl border ${statusConfig.borderColor} rounded-2xl p-4 sm:p-6 shadow-2xl`}
       >
         <div className="flex items-start gap-4">
           <motion.div

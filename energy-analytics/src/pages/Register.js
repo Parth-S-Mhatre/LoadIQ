@@ -97,18 +97,18 @@ export default function Register() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080B14] flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-[#080B14] flex flex-col items-center justify-center p-4 sm:p-6 pt-24 sm:pt-6 relative overflow-x-hidden overflow-y-auto font-sans">
       {/* Background Orbs */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <motion.div
           animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.25, 0.15] }}
           transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute bottom-1/3 -right-1/4 w-[700px] h-[700px] bg-cyan-600/20 rounded-full blur-[120px]"
+          className="absolute bottom-1/3 -right-1/2 sm:-right-1/4 w-[380px] h-[380px] sm:w-[700px] sm:h-[700px] bg-cyan-600/20 rounded-full blur-[90px] sm:blur-[120px]"
         />
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
           transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute top-1/4 left-0 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px]"
+          className="absolute top-1/4 -left-1/3 sm:left-0 w-[340px] h-[340px] sm:w-[500px] sm:h-[500px] bg-indigo-600/20 rounded-full blur-[90px] sm:blur-[120px]"
         />
         <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
       </div>
@@ -117,12 +117,12 @@ export default function Register() {
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         onClick={() => navigate("/")}
-        className="absolute top-8 left-8 flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-all group z-10"
+        className="absolute top-4 left-4 sm:top-8 sm:left-8 flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-white transition-all group z-10"
       >
         <div className="w-10 h-10 rounded-2xl bg-[#10162A] border border-white/5 flex items-center justify-center group-hover:bg-[#06B6D4] group-hover:border-[#06B6D4] transition-all shadow-lg group-hover:shadow-[0_0_20px_rgba(6,182,212,0.4)]">
           <Home size={16} />
         </div>
-        Return Home
+        <span className="hidden sm:inline">Return Home</span>
       </motion.button>
 
       <div
@@ -138,7 +138,7 @@ export default function Register() {
           className="glass-panel rounded-[2rem] overflow-hidden"
         >
           {/* Inner 3D Content Wrapper */}
-          <div style={{ transform: "translateZ(30px)" }} className="p-10">
+          <div style={{ transform: "translateZ(30px)" }} className="p-6 sm:p-10">
             <div className="text-center mb-8">
               <motion.div
                 whileHover={{ rotate: -180 }}
@@ -225,7 +225,7 @@ export default function Register() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="grid grid-cols-2 gap-4"
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
               >
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Password</label>

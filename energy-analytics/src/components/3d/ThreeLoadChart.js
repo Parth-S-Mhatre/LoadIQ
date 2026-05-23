@@ -50,10 +50,9 @@ const Bar = ({ position, height, color, label, isPredicted }) => {
     );
 };
 
-const ThreeLoadChartComponent = ({ safeData, safePredicted, maxVal, getNormalizedHeight }) => {
+const ThreeLoadChartComponent = ({ safeData, safePredicted, getNormalizedHeight }) => {
     // Calculate total bars and optimal camera position
     const totalBars = safeData.length + safePredicted.length;
-    const cameraDistance = Math.max(20, totalBars * 1.2); // Dynamic distance based on data
     
     return (
         <>
@@ -121,8 +120,8 @@ const ThreeLoadChartComponent = ({ safeData, safePredicted, maxVal, getNormalize
 
 const ThreeLoadChart = ({ data = [], predicted = [] }) => {
     // Safety check for data
-    const safeData = Array.isArray(data) ? data : [];
-    const safePredicted = Array.isArray(predicted) ? predicted : [];
+    const safeData = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+    const safePredicted = useMemo(() => (Array.isArray(predicted) ? predicted : []), [predicted]);
     const canvasRef = useRef();
 
     // Calculate max value for normalization
@@ -189,7 +188,6 @@ const ThreeLoadChart = ({ data = [], predicted = [] }) => {
                     antialias: true,
                     alpha: true,
                     powerPreference: 'high-performance',
-                    preserveDrawingBuffer: true,
                     failIfMajorPerformanceCaveat: false
                 }}
                 onCreated={({ gl }) => {
@@ -200,7 +198,6 @@ const ThreeLoadChart = ({ data = [], predicted = [] }) => {
                 <ThreeLoadChartComponent
                     safeData={safeData}
                     safePredicted={safePredicted}
-                    maxVal={maxVal}
                     getNormalizedHeight={getNormalizedHeight}
                 />
             </Canvas>

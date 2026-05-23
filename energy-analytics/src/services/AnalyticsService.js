@@ -133,11 +133,12 @@ export const AnalyticsService = {
    * Fetch batch predictions or iterative horizon forecasts.
    * Uses MODEL2_API for batch forecasting
    */
-  getBatchPredictions: async ({ last24Hours, horizon, loads, scenarios }) => {
+  getBatchPredictions: async ({ last24Hours, horizon, loads, scenarios, contextFeatures }) => {
     try {
       const payload = last24Hours
         ? {
             model: 'ensemble',
+            ...(contextFeatures || {}),
             last_24_hours: last24Hours,
             horizon
           }

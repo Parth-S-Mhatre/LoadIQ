@@ -3,6 +3,28 @@ import { collection, addDoc, query, where, getDocs, doc, getDoc, setDoc } from '
 
 const ANALYTICS_COLLECTION = 'user_analytics';
 const PROFILE_COLLECTION = 'user_profiles';
+const LEGACY_USERS_COLLECTION = 'users';
+
+const removeUndefinedValues = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(removeUndefinedValues);
+  }
+
+  if (value && typeof value === 'object' && typeof value.toDate !== 'function') {
+    return Object.entries(value).reduce((cleaned, [key, item]) => {
+      if (item !== undefined) {
+        cleaned[key] = removeUndefinedValues(item);
+      }
+      return cleaned;
+    }, {});
+  }
+
+  return value;
+};
+
+const isOfflineFirestoreError = (error) => {
+  return error?.code === 'unavailable' || String(error?.message || '').toLowerCase().includes('client is offline');
+};
 
 const toTimestampValue = (value) => {
   if (!value) {
@@ -99,16 +121,29 @@ export const UserHistoryService = {
   saveUserProfile: async (userId, profileData) => {
     try {
       const profileRef = doc(db, PROFILE_COLLECTION, userId);
-      const existingProfile = await getDoc(profileRef);
-      await setDoc(profileRef, {
+      const timestamp = new Date();
+      const profilePayload = removeUndefinedValues({
+        uid: userId,
         userId,
         ...profileData,
-        createdAt: existingProfile.exists() ? existingProfile.data().createdAt || new Date() : new Date(),
-        updatedAt: new Date()
-      }, { merge: true });
+        createdAt: profileData?.createdAt || profileData?.createdAtIso || timestamp,
+        updatedAt: timestamp,
+        updatedAtIso: timestamp.toISOString()
+      });
+
+      await setDoc(profileRef, profilePayload, { merge: true });
+
+      try {
+        await setDoc(doc(db, LEGACY_USERS_COLLECTION, userId), profilePayload, { merge: true });
+      } catch (mirrorError) {
+        console.warn('Profile saved to user_profiles but users mirror failed:', mirrorError);
+      }
+
       return profileRef.id;
     } catch (error) {
-      console.error('Error saving user profile:', error);
+      if (!isOfflineFirestoreError(error)) {
+        console.error('Error saving user profile:', error);
+      }
       throw error;
     }
   },
@@ -116,9 +151,16 @@ export const UserHistoryService = {
   getUserProfile: async (userId) => {
     try {
       const profileSnapshot = await getDoc(doc(db, PROFILE_COLLECTION, userId));
-      return profileSnapshot.exists() ? profileSnapshot.data() : null;
+      if (profileSnapshot.exists()) {
+        return profileSnapshot.data();
+      }
+
+      const legacyProfileSnapshot = await getDoc(doc(db, LEGACY_USERS_COLLECTION, userId));
+      return legacyProfileSnapshot.exists() ? legacyProfileSnapshot.data() : null;
     } catch (error) {
-      console.error('Error fetching user profile:', error);
+      if (!isOfflineFirestoreError(error)) {
+        console.error('Error fetching user profile:', error);
+      }
       return null;
     }
   },

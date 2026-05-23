@@ -250,19 +250,19 @@ export default function Landing() {
       </section>
 
       {/* Smart Engineering Section */}
-      <section className="py-24 px-6 relative z-10 glass-panel border-y border-white/5 overflow-hidden">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
+      <section className="py-16 sm:py-24 px-4 sm:px-6 relative z-10 glass-panel border-y border-white/5 overflow-hidden">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
           >
-            <h2 className="text-4xl md:text-6xl font-black mb-6 tracking-tight">
+            <h2 className="text-3xl sm:text-4xl md:text-6xl font-black mb-6 tracking-tight">
               Smart Engineering <br />
               <span className="text-indigo-400">Behind Every Forecast.</span>
             </h2>
-            <p className="text-slate-300 text-lg mb-8 leading-relaxed">
+            <p className="text-slate-300 text-base sm:text-lg mb-8 leading-relaxed">
               LoadIQ does not force the browser to preload every dashboard, dataset, model path, and visual layer before you even need them. Backend-driven pages arrive on demand, skeleton states hold the interface steady during network or service delays, and heavier rendering stays conditional so the platform remains smooth, practical, and more respectful of compute and energy use.
             </p>
             <div className="flex flex-wrap gap-4">
@@ -278,18 +278,39 @@ export default function Landing() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="aspect-video bg-gradient-to-tr from-indigo-900/20 to-slate-900 rounded-3xl border border-indigo-500/20 relative overflow-hidden flex items-center justify-center group shadow-2xl"
+            initial={{ opacity: 0, x: 30, rotateY: -8 }}
+            whileInView={{ opacity: 1, x: 0, rotateY: 0 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
+            whileHover={{ y: -8, scale: 1.015 }}
+            className="relative"
           >
-            <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-40 mix-blend-overlay transition-transform duration-700 group-hover:scale-110"></div>
-            <div className="relative z-10 text-center">
-              <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mx-auto mb-4 border border-white/20 group-hover:scale-110 transition-transform cursor-pointer shadow-2xl">
-                <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[18px] border-l-white border-b-[10px] border-b-transparent ml-1"></div>
+            <motion.div
+              aria-hidden="true"
+              animate={{ opacity: [0.22, 0.42, 0.22], scale: [0.98, 1.03, 0.98] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+              className="absolute -inset-4 rounded-[2rem] bg-cyan-500/20 blur-2xl"
+            />
+            <div className="relative overflow-hidden rounded-3xl border border-cyan-400/20 bg-slate-950 shadow-2xl shadow-cyan-950/30">
+              <div className="flex items-center justify-between border-b border-white/10 bg-slate-900/80 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                </div>
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-400">LoadIQ Walkthrough</span>
               </div>
-              <p className="font-bold text-white tracking-widest text-sm uppercase">Adaptive Rendering</p>
+              <div className="relative aspect-video w-full bg-slate-950">
+                <iframe
+                  src="https://app.heygen.com/embeds/794cd7ca4fd1481a90bf858901b627c4"
+                  title="LoadIQ AI video walkthrough"
+                  frameBorder="0"
+                  allow="encrypted-media; fullscreen; picture-in-picture"
+                  allowFullScreen
+                  loading="lazy"
+                  className="absolute inset-0 h-full w-full"
+                />
+              </div>
             </div>
           </motion.div>
         </div>
@@ -359,8 +380,8 @@ export default function Landing() {
             <p className="text-slate-400 max-w-2xl mx-auto text-sm md:text-base">Measured results across baseline and ensemble models, showing why the blended forecasting path is the production default for dependable electricity-demand prediction.</p>
           </div>
 
-          <div className="mb-16 overflow-x-auto">
-            <table className="w-full text-left border-collapse glass-panel rounded-2xl overflow-hidden shadow-2xl">
+          <div className="mb-16 overflow-x-auto rounded-2xl">
+            <table className="w-full min-w-[680px] text-left border-collapse glass-panel rounded-2xl overflow-hidden shadow-2xl">
               <thead>
                 <tr className="bg-indigo-900/40 text-indigo-300 text-sm uppercase tracking-widest">
                   <th className="p-6 font-bold border-b border-white/10">Model</th>
