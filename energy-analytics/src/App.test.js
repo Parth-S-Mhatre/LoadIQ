@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import App from './App';
+import LandingSkeleton from './skeleton_pages/LandingSkeleton';
 
-test('renders learn react link', () => {
-  render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+test('renders the landing skeleton copy', () => {
+  render(<LandingSkeleton />);
+  expect(screen.getByText(/preparing the landing experience/i)).toBeInTheDocument();
 });

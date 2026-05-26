@@ -8,7 +8,7 @@ const PredictorSkeleton = ({
 }) => {
     const resolvedTitle = title || (backendMode ? 'Waiting for prediction backend' : 'Preparing predictor workspace');
     const resolvedSubtitle = subtitle || (backendMode
-        ? 'The prediction page is holding its layout until the Render backend comes online and can serve forecasts.'
+        ? 'The prediction page is holding its layout until the combined Render backend finishes waking up and can serve forecasts.'
         : 'The predictor layout is being staged first so the heavier controls and visualizations can load smoothly.');
 
     return (

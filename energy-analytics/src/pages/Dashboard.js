@@ -753,7 +753,7 @@ const AdvancedAnalyticsPage = () => {
       )}
       {analyticsFallbackUsed && !analyticsError && (
         <div className="rounded-2xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
-          These analytics are being generated from the temporary fallback forecaster while the legacy backend model is being refreshed.
+          These analytics are being generated from the temporary fallback forecaster while the combined Render backend finishes loading.
         </div>
       )}
 

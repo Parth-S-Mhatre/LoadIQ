@@ -82,7 +82,7 @@ const BackendConnection = ({ onConnectionChange }) => {
           bgColor: 'bg-green-500/10',
           borderColor: 'border-green-500/30',
           title: 'Backend Connected',
-          message: 'Successfully connected to LoadIQ analytics server!',
+          message: 'Successfully connected to the combined LoadIQ analytics backend!',
           animation: ''
         };
       case 'timeout':
@@ -92,7 +92,7 @@ const BackendConnection = ({ onConnectionChange }) => {
           bgColor: 'bg-amber-500/10',
           borderColor: 'border-amber-500/30',
           title: 'Connection Timeout',
-          message: 'Server is waking up. Please try again later.',
+          message: 'The combined Render service is waking up. Please try again later.',
           animation: ''
         };
       case 'error':

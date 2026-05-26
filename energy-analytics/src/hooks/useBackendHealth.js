@@ -12,7 +12,46 @@ const defaultStatus = {
     latency: null,
     error: null,
     modelLoaded: false,
+    loadedModels: 0,
+    totalModels: 0,
+    backendMode: null,
     consecutiveFailures: 0
+};
+
+const extractBackendModelState = (data) => {
+    if (!data || typeof data !== 'object') {
+        return {
+            modelLoaded: false,
+            loadedModels: 0,
+            totalModels: 0
+        };
+    }
+
+    if (typeof data.model_loaded === 'boolean') {
+        return {
+            modelLoaded: data.model_loaded,
+            loadedModels: data.model_loaded ? 1 : 0,
+            totalModels: 1
+        };
+    }
+
+    if (data.models && typeof data.models === 'object') {
+        const modelStates = Object.values(data.models).filter((value) => typeof value === 'boolean');
+        const loadedModels = modelStates.filter(Boolean).length;
+        const totalModels = modelStates.length;
+
+        return {
+            modelLoaded: totalModels === 0 ? false : loadedModels === totalModels,
+            loadedModels,
+            totalModels
+        };
+    }
+
+    return {
+        modelLoaded: false,
+        loadedModels: 0,
+        totalModels: 0
+    };
 };
 
 const useBackendHealth = (enabled = true) => {
@@ -53,6 +92,7 @@ const useBackendHealth = (enabled = true) => {
 
                     const data = await response.json();
                     const latency = Date.now() - startTime;
+                    const { modelLoaded, loadedModels, totalModels } = extractBackendModelState(data);
 
                     setStatus({
                         isOnline: true,
@@ -60,7 +100,10 @@ const useBackendHealth = (enabled = true) => {
                         lastCheck: new Date(),
                         latency,
                         error: null,
-                        modelLoaded: data.model_loaded || false,
+                        modelLoaded,
+                        loadedModels,
+                        totalModels,
+                        backendMode: data.mode || null,
                         consecutiveFailures: 0
                     });
                     return;
@@ -80,6 +123,9 @@ const useBackendHealth = (enabled = true) => {
                 latency: null,
                 error: error.message,
                 modelLoaded: false,
+                loadedModels: 0,
+                totalModels: 0,
+                backendMode: null,
                 consecutiveFailures: prev.consecutiveFailures + 1
             }));
         }

@@ -2,9 +2,22 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, AlertCircle, RefreshCw, Wifi, WifiOff, Zap } from 'lucide-react';
 import useBackendHealth from '../hooks/useBackendHealth';
+import { API_CONFIG } from '../config/api';
 
 const BackendStatus = ({ compact = false }) => {
-    const { isOnline, isChecking, lastCheck, latency, error, modelLoaded, consecutiveFailures, refresh } = useBackendHealth();
+    const {
+        isOnline,
+        isChecking,
+        lastCheck,
+        latency,
+        error,
+        modelLoaded,
+        loadedModels,
+        totalModels,
+        backendMode,
+        consecutiveFailures,
+        refresh
+    } = useBackendHealth();
 
     const getStatusColor = () => {
         if (isChecking) return 'bg-yellow-500';
@@ -16,6 +29,7 @@ const BackendStatus = ({ compact = false }) => {
     const getStatusText = () => {
         if (isChecking) return 'Checking...';
         if (isOnline && modelLoaded) return 'Online';
+        if (isOnline && !modelLoaded && totalModels > 1) return `Models Loading (${loadedModels}/${totalModels})`;
         if (isOnline && !modelLoaded) return 'Model Loading';
         return 'Offline';
     };
@@ -136,8 +150,19 @@ const BackendStatus = ({ compact = false }) => {
                         </span>
                     </div>
                     <p className={`text-lg font-black uppercase tracking-tight ${modelLoaded ? 'text-emerald-400' : 'text-slate-600'}`}>
-                        {modelLoaded ? 'Ready' : 'Loading'}
+                        {modelLoaded
+                            ? totalModels > 1
+                                ? `Ready (${loadedModels}/${totalModels})`
+                                : 'Ready'
+                            : totalModels > 1
+                                ? `Loading (${loadedModels}/${totalModels})`
+                                : 'Loading'}
                     </p>
+                    {backendMode && (
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                            {backendMode.replace(/_/g, ' ')}
+                        </p>
+                    )}
                 </div>
 
                 {/* Last Check */}
@@ -184,7 +209,7 @@ const BackendStatus = ({ compact = false }) => {
             {/* Backend URL Info */}
             <div className="mt-4 pt-4 border-t border-white/5">
                 <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest">
-                    Endpoint: loadiq.onrender.com
+                    Endpoint: {API_CONFIG.BASE_URL.replace(/^https?:\/\//, '')}
                 </p>
             </div>
         </motion.div>
