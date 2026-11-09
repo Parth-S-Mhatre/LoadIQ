@@ -975,7 +975,10 @@ def health():
         "on_demand_loading": True,
         "unload_inactive_models": UNLOAD_INACTIVE_MODELS,
         "checked_directories": _checked_artifact_dirs(),
-        "artifact_error": ARTIFACT_ERROR if not gb_available else None,
+        # Report load failures even when the files exist: a pickle that cannot
+        # be unpickled (e.g. pandas-version mismatch) used to look healthy here
+        # while every request silently fell back to the heuristic model.
+        "artifact_error": ARTIFACT_ERROR,
     }
 
 
