@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { motion, useInView, animate, useReducedMotion } from 'framer-motion';
+import logoMark from '../../assets/loadiq-mark.png';
 
 export const cn = (...classes) => classes.filter(Boolean).join(' ');
 
@@ -10,16 +11,14 @@ export const Logo = ({ theme = 'dark', compact = false, className = '' }) => {
 
   return (
     <div className={cn('flex items-center gap-3', className)}>
-      <div
-        className={cn(
-          'relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-[10px]',
-          isLight ? 'bg-signal text-ink' : 'bg-ink text-signal'
-        )}
-      >
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" aria-hidden="true">
-          <path d="M13.2 2.5 5.6 13h5.1l-.9 8.5 7.6-10.5h-5.1l.9-8.5Z" fill="currentColor" />
-        </svg>
-        <span className="absolute inset-x-0 bottom-0 h-[2px] bg-current opacity-30" />
+      <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px]">
+        <img
+          src={logoMark}
+          alt=""
+          aria-hidden="true"
+          draggable="false"
+          className="h-full w-full object-cover"
+        />
       </div>
       {!compact && (
         <div className="leading-none">
