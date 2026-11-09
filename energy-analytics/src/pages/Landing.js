@@ -30,6 +30,8 @@ import plotActualVsPredicted from "../Images_result/plot_actual_vs_predicted.png
 import plotErrorByHour from "../Images_result/plot_error_by_hour.png";
 import plotFeatureImportance from "../Images_result/plot_feature_importance.png";
 import plotResiduals from "../Images_result/plot_residuals.png";
+import heroLoop from "../assets/LoadIQ_hero_loop.mp4";
+import heroPoster from "../assets/loadiq-hero-poster.jpg";
 import {
   Badge,
   CountUp,
@@ -173,7 +175,6 @@ export default function Landing() {
 
   const { scrollY, scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 30, mass: 0.2 });
-  const heroImageY = useTransform(scrollY, [0, 700], [0, 70]);
   const heroTextY = useTransform(scrollY, [0, 700], [0, 32]);
 
   useEffect(() => {
@@ -370,13 +371,26 @@ export default function Landing() {
           >
             <div className="relative overflow-hidden rounded-[1.5rem] border border-ink/15 bg-ink shadow-[0_40px_90px_-50px_rgba(17,24,19,0.9)]">
               <div className="relative h-[26rem] overflow-hidden sm:h-[30rem] lg:h-[34rem]">
-                <motion.img
-                  src={IMAGES.earth}
-                  alt="Europe and the Mediterranean at night, lit by city and grid networks"
-                  className="absolute inset-0 h-[112%] w-full object-cover image-wash"
-                  style={reduceMotion ? undefined : { y: heroImageY }}
-                  loading="eager"
-                />
+                {reduceMotion ? (
+                  <img
+                    src={heroPoster}
+                    alt="A lime energy demand curve sweeping across a dark green grid surface"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading="eager"
+                  />
+                ) : (
+                  <video
+                    src={heroLoop}
+                    poster={heroPoster}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    aria-hidden="true"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/25 to-transparent" />
                 <div className="absolute inset-0 grain" />
 
