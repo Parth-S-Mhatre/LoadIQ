@@ -42,8 +42,20 @@ import { useAuth } from '../context/AuthContext';
 import { useDisclaimer } from '../context/DisclaimerContext';
 import { AnalyticsService } from '../services/AnalyticsService';
 import { UserHistoryService } from '../services/UserHistoryService';
+import { Badge, EASE, StatusDot, buttonClass } from '../components/ui';
 
 const ThreeLoadChart = lazy(() => import('../components/3d/ThreeLoadChart'));
+
+const CHART = {
+  grid: 'rgba(17, 24, 19, 0.09)',
+  axis: '#8A9188',
+  ink: '#111813',
+  moss: '#0F3D2E',
+  signal: '#A5C01D',
+  clay: '#C75B32',
+  sky: '#3A6B8A',
+  amber: '#C99A2E',
+};
 
 const POSTMAN_MODEL2_SAMPLE = {
   hour: 14,
@@ -104,6 +116,20 @@ const buildContextFromDate = () => {
     model: 'ensemble'
   };
 };
+
+const Panel = ({ children, className = '' }) => (
+  <section className={`surface ${className}`.trim()}>{children}</section>
+);
+
+const PanelHeading = ({ icon: Icon, title, meta }) => (
+  <div className="flex items-center justify-between gap-3">
+    <h3 className="flex items-center gap-2 text-[0.8rem] font-medium text-ink/75">
+      {Icon && <Icon size={15} className="text-ink/45" />}
+      {title}
+    </h3>
+    {meta}
+  </div>
+);
 
 const LoadPredictor = () => {
   const [historicalLoads, setHistoricalLoads] = useState(POSTMAN_MODEL2_SAMPLE.last_24_hours);
@@ -365,7 +391,8 @@ const LoadPredictor = () => {
   }, [forecastHorizon, historicalLoads, loadFeatures, requestPayload]);
 
   const savePredictionHistory = useCallback(async (predictionRecord) => {
-    const historyKey = `analyticsHistory_${user?.uid || 'guest'}`;
+    const userSuffix = user?.uid ? `_${user.uid}` : '_guest';
+    const historyKey = `analyticsHistory${userSuffix}`;
     const savedProfile = user?.uid
       ? JSON.parse(localStorage.getItem(`userProfile_${user.uid}`) || 'null')
       : null;
@@ -374,7 +401,7 @@ const LoadPredictor = () => {
       workspaceName: savedProfile?.workspaceName || '',
       organization: savedProfile?.organization || ''
     };
-    localStorage.setItem('loadiq_latest_prediction_context', JSON.stringify(recordWithWorkspace));
+    localStorage.setItem(`loadiq_latest_prediction_context${userSuffix}`, JSON.stringify(recordWithWorkspace));
     const existingHistory = JSON.parse(localStorage.getItem(historyKey) || '[]');
     existingHistory.unshift(recordWithWorkspace);
     localStorage.setItem(historyKey, JSON.stringify(existingHistory.slice(0, 50)));
@@ -441,14 +468,17 @@ const LoadPredictor = () => {
       }
 
       return (
-        <div className="bg-slate-950/95 border border-slate-700 rounded-lg p-4 shadow-xl min-w-[180px]">
-          <p className="text-xs text-slate-400 mb-2">{label}</p>
-          <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${entry.dataKey === 'actual' ? 'bg-cyan-400' : 'bg-emerald-400'}`} />
-            <span className="text-white font-semibold">
-              {entry.dataKey === 'actual' ? 'Actual' : 'Forecast'}:
-              <span className="ml-1.5 text-lg">{formatMw(entry.value)}</span>
+        <div className="min-w-[10rem] rounded-xl border border-ink/15 bg-paper-50 p-3 shadow-panel">
+          <p className="label-sm mb-2 text-ink/40">{label}</p>
+          <div className="flex items-center gap-2.5">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: entry.dataKey === 'actual' ? CHART.ink : CHART.moss }}
+            />
+            <span className="text-xs font-medium text-ink/60">
+              {entry.dataKey === 'actual' ? 'Actual' : entry.dataKey === 'predicted' ? 'Forecast' : 'Value'}
             </span>
+            <span className="mono-num ml-auto text-sm font-medium text-ink">{formatMw(entry.value)}</span>
           </div>
         </div>
       );
@@ -456,11 +486,48 @@ const LoadPredictor = () => {
     return null;
   };
 
+  const horizonPercent = ((forecastHorizon - 1) / 23) * 100;
+
+  const headerStats = [
+    { label: 'Horizon', value: `${forecastHorizon}h`, icon: Clock },
+    { label: 'Hour', value: `${requestPayload.hour}:00`, icon: Calendar },
+    { label: 'Mean', value: formatGw(loadFeatures.mean), icon: BarChart3 },
+    { label: 'Risk', value: stats.risk, icon: Gauge }
+  ];
+
+  const summaryCards = [
+    {
+      label: 'Next hour',
+      value: predictions.length ? formatGw(predictions[0]) : '—',
+      sub: predictions.length ? formatMw(predictions[0]) : 'Run a forecast',
+      icon: Target
+    },
+    {
+      label: 'Forecast delta',
+      value: stats.delta ? formatMw(Math.abs(stats.delta)) : 'Stable',
+      sub: stats.direction === 'up' ? 'Demand rising' : stats.direction === 'down' ? 'Demand easing' : 'No movement',
+      icon: stats.direction === 'down' ? TrendingDown : TrendingUp
+    },
+    {
+      label: 'Peak window',
+      value: stats.forecastPeak ? formatGw(stats.forecastPeak) : formatGw(stats.peak),
+      sub: stats.peakStep ? `Forecast step +${stats.peakStep}h` : 'Historical peak',
+      icon: Activity
+    },
+    {
+      label: 'Load factor',
+      value: `${loadFeatures.loadFactor.toFixed(1)}%`,
+      sub: `Volatility ${loadFeatures.volatility.toFixed(1)}%`,
+      icon: Gauge
+    }
+  ];
+
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      className="relative min-h-[80vh] bg-slate-950/90 border border-slate-700/60 shadow-2xl overflow-hidden rounded-lg"
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: EASE }}
+      className="relative space-y-4"
     >
       <AnimatePresence>
         {loading && (
@@ -468,30 +535,32 @@ const LoadPredictor = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-6"
+            className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl bg-paper/85 p-6 backdrop-blur-md"
           >
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
+              initial={{ scale: 0.96, y: 14 }}
               animate={{ scale: 1, y: 0 }}
-              className="bg-slate-900 border border-cyan-500/30 rounded-lg p-8 max-w-sm w-full text-center shadow-2xl"
+              className="w-full max-w-sm rounded-2xl border border-ink/15 bg-paper-50 p-8 text-center shadow-lift"
             >
-              <div className="relative mb-6">
+              <div className="relative mx-auto mb-6 h-16 w-16">
                 <motion.div
                   animate={{ rotate: 360 }}
                   transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="w-16 h-16 border-4 border-cyan-500/20 border-t-cyan-400 rounded-full mx-auto"
+                  className="absolute inset-0 rounded-full border-2 border-ink/10 border-t-moss"
                 />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Cpu className="text-cyan-300" size={24} />
+                  <Cpu className="text-moss" size={22} />
                 </div>
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Running Model2 Forecast</h3>
-              <p className="text-slate-300 text-sm mb-4">
-                Sending lag, rolling statistics, calendar context, and the 24-hour sequence.
+              <p className="label text-ink/40">Model 2 · sequence</p>
+              <h3 className="mt-2 text-lg font-medium tracking-[-0.03em]">Running the forecast</h3>
+              <p className="mt-2 text-xs leading-relaxed text-ink/45">
+                Sending lag values, rolling statistics, calendar context and the 24-hour sequence.
               </p>
-              <p className="text-xs text-slate-400">
-                {predictions.length > 0 ? `${predictions.length}/${forecastHorizon} steps completed` : 'Preparing payload...'}
-              </p>
+              <div className="mt-5 flex items-center justify-center gap-2 text-[0.68rem] text-ink/40">
+                <StatusDot tone="lime" />
+                {predictions.length > 0 ? `${predictions.length}/${forecastHorizon} steps completed` : 'Preparing payload'}
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -503,164 +572,189 @@ const LoadPredictor = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-xl p-6"
+            className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl bg-ink/45 p-6 backdrop-blur-sm"
           >
             <motion.div
-              initial={{ scale: 0.92, y: 20 }}
+              initial={{ scale: 0.96, y: 14 }}
               animate={{ scale: 1, y: 0 }}
-              className="bg-slate-900 border border-cyan-500/30 rounded-lg p-8 max-w-md w-full text-center shadow-2xl"
+              className="w-full max-w-md overflow-hidden rounded-2xl border border-ink/15 bg-paper-50 shadow-lift"
             >
-              <Cpu className="mx-auto text-cyan-300 mb-6" size={56} />
-              <h3 className="text-2xl font-black text-white mb-4">Load Prediction Engine</h3>
-              <p className="text-slate-300 text-sm mb-8 leading-relaxed">
-                Forecasts are generated from historical patterns and model features. Validate operational decisions with live grid data.
-              </p>
-              <button
-                onClick={() => dismissDisclaimer()}
-                className="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg transition-all"
-              >
-                Acknowledge and Continue
-              </button>
+              <div className="flex items-center justify-between border-b border-ink/10 px-6 py-4">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink text-signal">
+                    <Zap size={13} />
+                  </span>
+                  <span className="text-sm font-medium">Prediction engine</span>
+                </div>
+                <span className="label-sm text-ink/30">Model 2</span>
+              </div>
+              <div className="px-6 py-6">
+                <h3 className="text-xl font-medium tracking-[-0.03em]">Before you run a forecast</h3>
+                <p className="mt-3 text-sm leading-relaxed text-ink/55">
+                  Forecasts are generated from historical patterns and model features. Validate
+                  operational decisions against live grid data before acting.
+                </p>
+                <div className="mt-5 rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                  <p className="label-sm text-ink/35">Good practice</p>
+                  <p className="mt-1.5 text-[0.7rem] leading-relaxed text-ink/50">
+                    Compare the ensemble output with your telemetry and confidence interval before dispatching.
+                  </p>
+                </div>
+              </div>
+              <div className="border-t border-ink/10 px-6 py-4">
+                <button
+                  onClick={() => dismissDisclaimer()}
+                  className={buttonClass('primary', 'md', 'w-full')}
+                >
+                  Acknowledge and continue
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="p-4 sm:p-6 md:p-8 border-b border-slate-700/60 bg-slate-900/60">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-4 bg-cyan-500/10 rounded-lg border border-cyan-400/20">
-              <Zap className="text-cyan-300" size={32} />
-            </div>
+      {/* Header */}
+      <div className="surface overflow-hidden">
+        <div className="flex flex-col gap-6 border-b border-ink/10 px-5 py-6 sm:px-7 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-start gap-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-ink/10 bg-ink text-signal">
+              <Zap size={22} />
+            </span>
             <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white">Load Forecaster</h1>
-              <div className="flex flex-wrap items-center gap-4 mt-2 text-sm">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <p className="label text-ink/35">Model 2 · sequence</p>
+                <Badge tone="moss">Ensemble</Badge>
+              </div>
+              <h1 className="mt-2 text-xl font-medium tracking-[-0.04em] sm:text-2xl">Load forecaster</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.68rem] text-ink/45">
+                <span className="flex items-center gap-1.5">
                   {backendStatusTone === 'green' ? (
-                    <Wifi className="text-emerald-400" size={16} />
+                    <Wifi size={13} className="text-moss" />
                   ) : (
-                    <WifiOff className={backendStatusTone === 'amber' ? "text-amber-400" : "text-red-400"} size={16} />
+                    <WifiOff size={13} className={backendStatusTone === 'amber' ? 'text-amber-600' : 'text-clay'} />
                   )}
-                  <span className={backendStatusTone === 'green' ? "text-emerald-400" : backendStatusTone === 'amber' ? "text-amber-400" : "text-red-400"}>
-                    {backendStatusLabel}
-                  </span>
-                </div>
-                {backendHealth.latency && <span className="text-slate-400 text-xs">{backendHealth.latency} ms</span>}
-                <span className="text-slate-400 text-xs">Model: {requestPayload.model}</span>
+                  {backendStatusLabel}
+                </span>
+                {backendHealth.latency && <span className="mono-num text-ink/35">{backendHealth.latency} ms</span>}
+                <span className="label-sm text-ink/30">model {requestPayload.model}</span>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-            {[
-              { label: 'Horizon', value: `${forecastHorizon}h`, icon: Clock },
-              { label: 'Hour', value: `${requestPayload.hour}:00`, icon: Calendar },
-              { label: 'Mean', value: formatGw(loadFeatures.mean), icon: BarChart3 },
-              { label: 'Risk', value: stats.risk, icon: Gauge }
-            ].map((item) => (
-              <div key={item.label} className="rounded-lg border border-slate-700 bg-slate-950/70 p-4">
-                <div className="flex items-center gap-2 text-slate-400 text-xs mb-2">
-                  <item.icon size={14} />
-                  <span>{item.label}</span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            {headerStats.map((item) => (
+              <div key={item.label} className="rounded-xl border border-ink/10 bg-paper-100 px-3.5 py-3">
+                <div className="flex items-center gap-1.5 text-ink/35">
+                  <item.icon size={12} />
+                  <span className="label-sm">{item.label}</span>
                 </div>
-                <p className="text-white font-black text-xl">{item.value}</p>
+                <p className="mono-num mt-2 text-sm font-medium text-ink">{item.value}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="grid xl:grid-cols-12 gap-4 sm:gap-6 p-4 sm:p-6 md:p-8">
-        <div className="xl:col-span-4 space-y-6">
-          <section className="bg-slate-900/70 rounded-lg border border-slate-700 p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                <Layers size={16} /> Model2 Scenarios
-              </h3>
-              <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-600 flex items-center gap-2 text-xs font-medium transition-colors"
-              >
-                <Sliders size={14} />
-                {showAdvanced ? "Hide JSON" : "Show JSON"}
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid gap-4 xl:grid-cols-12">
+        {/* Controls */}
+        <div className="space-y-4 xl:col-span-4">
+          <Panel className="p-5">
+            <PanelHeading
+              icon={Layers}
+              title="Model 2 scenarios"
+              meta={
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className={buttonClass('soft', 'sm', 'h-8 px-3 text-[0.68rem]')}
+                >
+                  <Sliders size={13} />
+                  {showAdvanced ? 'Hide JSON' : 'Show JSON'}
+                </button>
+              }
+            />
+            <div className="mt-4 grid grid-cols-2 gap-2">
               {[
-                { label: 'Postman Sample', type: 'postman' },
-                { label: 'Low Demand', type: 'low' },
-                { label: 'High Demand', type: 'high' },
-                { label: 'Evening Peak', type: 'peak-evening' }
+                { label: 'Postman sample', type: 'postman' },
+                { label: 'Low demand', type: 'low' },
+                { label: 'High demand', type: 'high' },
+                { label: 'Evening peak', type: 'peak-evening' }
               ].map((preset) => (
                 <button
                   key={preset.type}
                   onClick={() => applyPreset(preset.type)}
-                  className="py-3 px-4 bg-slate-800 hover:bg-cyan-500/15 border border-slate-600 hover:border-cyan-400/50 rounded-lg text-sm font-medium text-slate-100 transition-all"
+                  className="rounded-lg border border-ink/12 bg-paper-50 px-3 py-2.5 text-left text-[0.72rem] font-medium text-ink/70 transition-all duration-300 hover:border-ink/30 hover:bg-white hover:text-ink"
                 >
                   {preset.label}
                 </button>
               ))}
             </div>
-          </section>
+          </Panel>
 
-          <section className="bg-slate-900/70 rounded-lg border border-slate-700 p-5">
-            <div className="flex justify-between items-center mb-5">
-              <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                <Database size={16} /> Last 24 Hours
-              </h3>
-              <span className="text-xs text-slate-500">MW</span>
-            </div>
+          <Panel className="p-5">
+            <PanelHeading
+              icon={Database}
+              title="Last 24 hours"
+              meta={<span className="label-sm text-ink/30">MW</span>}
+            />
 
-            <div className={`space-y-4 max-h-[430px] overflow-y-auto pr-2 custom-scrollbar ${isLargeDesktop ? 'h-[430px]' : 'h-[340px]'}`}>
-              {historicalLoads.map((value, index) => (
-                <div key={index} className="space-y-1.5">
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>{index === 23 ? 'Now' : `-${23 - index}h`}</span>
-                    <span className="text-cyan-300 font-medium">{formatMw(value)}</span>
+            <div className={`mt-4 space-y-4 overflow-y-auto pr-2 custom-scrollbar ${isLargeDesktop ? 'h-[430px]' : 'h-[340px]'}`}>
+              {historicalLoads.map((value, index) => {
+                const percent = ((value - 10000) / 80000) * 100;
+                return (
+                  <div key={index} className="space-y-1.5">
+                    <div className="flex items-baseline justify-between text-[0.68rem]">
+                      <span className="label-sm text-ink/35">{index === 23 ? 'Now' : `-${23 - index}h`}</span>
+                      <span className="mono-num font-medium text-ink/70">{formatMw(value)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10000}
+                      max={90000}
+                      step={100}
+                      value={value}
+                      onChange={(event) => handleInputChange(index, event.target.value)}
+                      className="range"
+                      style={{
+                        background: `linear-gradient(to right, #0F3D2E ${percent}%, rgba(17,24,19,0.12) ${percent}%, rgba(17,24,19,0.12) 100%)`,
+                      }}
+                      aria-label={`Load at ${index === 23 ? 'now' : `minus ${23 - index} hours`}`}
+                    />
                   </div>
-                  <input
-                    type="range"
-                    min={10000}
-                    max={90000}
-                    step={100}
-                    value={value}
-                    onChange={(event) => handleInputChange(index, event.target.value)}
-                    className="w-full accent-cyan-400 cursor-pointer"
-                  />
-                </div>
-              ))}
+                );
+              })}
             </div>
-          </section>
+          </Panel>
 
-          <section className="bg-slate-900/70 rounded-lg border border-slate-700 p-5 space-y-5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <label className="space-y-2">
-                <span className="text-xs text-slate-400">Hour</span>
+          <Panel className="space-y-5 p-5">
+            <div className="grid grid-cols-3 gap-2.5">
+              <label className="space-y-1.5">
+                <span className="label-sm block text-ink/40">Hour</span>
                 <input
                   type="number"
                   min={0}
                   max={23}
                   value={modelContext.hour}
                   onChange={(event) => setModelContext((prev) => ({ ...prev, hour: Number(event.target.value) }))}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-cyan-400 focus:outline-none"
+                  className="h-10 w-full rounded-lg border border-ink/15 bg-paper-50 px-2.5 text-sm text-ink transition-all focus:border-ink focus:outline-none focus:ring-2 focus:ring-signal-300/60"
                 />
               </label>
-              <label className="space-y-2">
-                <span className="text-xs text-slate-400">Day</span>
+              <label className="space-y-1.5">
+                <span className="label-sm block text-ink/40">Day</span>
                 <select
                   value={modelContext.day_of_week}
                   onChange={(event) => setModelContext((prev) => ({ ...prev, day_of_week: Number(event.target.value) }))}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-cyan-400 focus:outline-none"
+                  className="h-10 w-full cursor-pointer rounded-lg border border-ink/15 bg-paper-50 px-2.5 text-sm text-ink transition-all focus:border-ink focus:outline-none focus:ring-2 focus:ring-signal-300/60"
                 >
                   {WEEKDAY_LABELS.map((label, index) => <option key={label} value={index}>{label}</option>)}
                 </select>
               </label>
-              <label className="space-y-2">
-                <span className="text-xs text-slate-400">Month</span>
+              <label className="space-y-1.5">
+                <span className="label-sm block text-ink/40">Month</span>
                 <select
                   value={modelContext.month}
                   onChange={(event) => setModelContext((prev) => ({ ...prev, month: Number(event.target.value) }))}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-cyan-400 focus:outline-none"
+                  className="h-10 w-full cursor-pointer rounded-lg border border-ink/15 bg-paper-50 px-2.5 text-sm text-ink transition-all focus:border-ink focus:outline-none focus:ring-2 focus:ring-signal-300/60"
                 >
                   {MONTH_LABELS.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
                 </select>
@@ -669,15 +763,16 @@ const LoadPredictor = () => {
 
             <button
               onClick={useCurrentCalendar}
-              className="w-full py-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 font-semibold transition-all"
+              className={buttonClass('outline', 'md', 'w-full')}
             >
-              Use Current Date and Hour
+              <Calendar size={14} />
+              Use current date and hour
             </button>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-300">Forecast Horizon</span>
-                <span className="text-cyan-300 font-bold">{forecastHorizon} hours</span>
+            <div>
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="text-[0.78rem] font-medium text-ink/60">Forecast horizon</span>
+                <span className="mono-num text-sm font-medium">{forecastHorizon} hours</span>
               </div>
               <input
                 type="range"
@@ -685,57 +780,60 @@ const LoadPredictor = () => {
                 max={24}
                 value={forecastHorizon}
                 onChange={(event) => setForecastHorizon(Number(event.target.value))}
-                className="w-full accent-cyan-400"
+                className="range"
+                style={{
+                  background: `linear-gradient(to right, #A5C01D ${horizonPercent}%, rgba(17,24,19,0.12) ${horizonPercent}%, rgba(17,24,19,0.12) 100%)`,
+                }}
+                aria-label="Forecast horizon in hours"
               />
+              <div className="mt-2 flex justify-between">
+                <span className="label-sm text-ink/25">1h</span>
+                <span className="label-sm text-ink/25">24h</span>
+              </div>
             </div>
 
-            <motion.button
-              whileHover={{ scale: loading ? 1 : 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               onClick={runPrediction}
               disabled={loading}
-              className={`w-full py-4 rounded-lg font-black text-lg flex items-center justify-center gap-3 transition-all shadow-xl ${
-                loading
-                  ? 'bg-slate-700 cursor-wait text-slate-300'
-                  : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-cyan-700/20'
-              }`}
+              className={buttonClass('primary', 'lg', 'w-full')}
             >
-              {loading ? <RefreshCw className="animate-spin" size={22} /> : <Play size={22} />}
-              {loading ? "Predicting..." : "Run Forecast"}
-            </motion.button>
-          </section>
+              {loading ? <RefreshCw className="animate-spin" size={17} /> : <Play size={17} />}
+              {loading ? 'Predicting…' : 'Run forecast'}
+            </button>
+          </Panel>
 
           {showAdvanced && (
-            <section className="bg-slate-900/70 rounded-lg border border-slate-700 p-5">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                  <Upload size={16} /> Model2 JSON
-                </h3>
-                <button
-                  onClick={syncJsonFromControls}
-                  className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200"
-                >
-                  Sync
-                </button>
-              </div>
+            <Panel className="p-5">
+              <PanelHeading
+                icon={Upload}
+                title="Model 2 JSON"
+                meta={
+                  <button
+                    onClick={syncJsonFromControls}
+                    className="label-sm rounded-md border border-ink/12 px-2.5 py-1.5 text-ink/50 transition-colors hover:border-ink/30 hover:text-ink"
+                  >
+                    Sync
+                  </button>
+                }
+              />
               <textarea
                 value={rawJsonInput}
                 onChange={(event) => setRawJsonInput(event.target.value)}
-                className="h-56 w-full resize-none rounded-lg border border-slate-700 bg-slate-950 p-3 font-mono text-xs text-slate-200 focus:border-cyan-400 focus:outline-none"
+                className="ui-textarea mt-4 h-56 resize-none"
                 spellCheck={false}
               />
               <button
                 onClick={handleJsonApply}
-                className="mt-3 w-full py-3 rounded-lg bg-slate-800 hover:bg-cyan-500/20 border border-slate-700 hover:border-cyan-400/50 text-slate-100 font-semibold"
+                className={buttonClass('soft', 'md', 'mt-3 w-full')}
               >
-                Apply JSON Payload
+                Apply JSON payload
               </button>
               {jsonMessage && (
-                <p className="mt-3 flex items-center gap-2 text-sm text-emerald-300">
-                  <CheckCircle size={16} /> {jsonMessage}
+                <p className="mt-3 flex items-center gap-2 text-[0.72rem] text-moss">
+                  <CheckCircle size={14} /> {jsonMessage}
                 </p>
               )}
-            </section>
+            </Panel>
           )}
 
           <AnimatePresence>
@@ -744,37 +842,43 @@ const LoadPredictor = () => {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-5 bg-red-950/60 border border-red-700/40 rounded-lg flex items-start gap-3 text-sm"
+                className="flex items-start gap-3 rounded-xl border border-clay/25 bg-clay/[0.06] p-4"
               >
-                <AlertTriangle className="text-red-400 mt-0.5" size={20} />
+                <AlertTriangle className="mt-0.5 shrink-0 text-clay" size={18} />
                 <div>
-                  <p className="font-semibold text-red-300 mb-1">Error</p>
-                  <p className="text-red-200/90">{error}</p>
+                  <p className="label-sm text-clay">Error</p>
+                  <p className="mt-1 text-xs leading-relaxed text-clay/90">{error}</p>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        <div className="xl:col-span-8 space-y-6">
-          <section className="bg-slate-950/70 border border-slate-700 rounded-lg p-4 sm:p-5 h-[420px] sm:h-[520px] relative">
-            <div className="absolute top-4 left-4 sm:top-5 sm:left-5 z-10 flex max-w-[calc(100%-7rem)] items-center gap-2 sm:gap-3">
-              <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
-              <h3 className="text-sm sm:text-lg font-black text-white">Forecast Workbench</h3>
+        {/* Results */}
+        <div className="space-y-4 xl:col-span-8">
+          <Panel className="relative h-[420px] overflow-hidden p-4 sm:h-[520px] sm:p-5">
+            <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-8rem)] items-center gap-2.5 sm:left-5 sm:top-5">
+              <StatusDot tone="lime" pulse={loading} />
+              <h3 className="text-sm font-medium tracking-[-0.02em] sm:text-base">Forecast workbench</h3>
             </div>
 
-            <div className="absolute top-4 right-4 sm:top-5 sm:right-5 z-10 flex gap-1 sm:gap-2 bg-slate-900/80 backdrop-blur-sm p-1 rounded-lg border border-slate-700">
+            <div className="absolute right-4 top-4 z-10 flex gap-1 rounded-full border border-ink/10 bg-paper-100 p-1 sm:right-5 sm:top-5">
               {['combined', '3d'].map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setChartMode(mode)}
-                  className={`px-3 sm:px-4 py-2 text-xs font-bold rounded-md transition-all ${
-                    chartMode === mode
-                      ? 'bg-cyan-500 text-slate-950'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  className={`relative rounded-full px-3.5 py-1.5 text-[0.68rem] font-semibold transition-colors ${
+                    chartMode === mode ? 'text-paper' : 'text-ink/45 hover:text-ink/75'
                   }`}
                 >
-                  {mode === '3d' ? '3D' : '2D'}
+                  {chartMode === mode && (
+                    <motion.span
+                      layoutId="predictor-chart-toggle"
+                      className="absolute inset-0 rounded-full bg-ink"
+                      transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10">{mode === '3d' ? '3D' : '2D'}</span>
                 </button>
               ))}
             </div>
@@ -782,8 +886,8 @@ const LoadPredictor = () => {
             {chartMode === '3d' ? (
               <Suspense
                 fallback={
-                  <div className="flex h-full items-center justify-center rounded-lg border border-slate-800 bg-slate-950/60">
-                    <div className="h-12 w-12 rounded-full border-4 border-slate-700 border-t-cyan-400 animate-spin" />
+                  <div className="flex h-full items-center justify-center">
+                    <div className="h-10 w-10 animate-spin rounded-full border-2 border-ink/10 border-t-moss" />
                   </div>
                 }
               >
@@ -794,123 +898,162 @@ const LoadPredictor = () => {
                 <AreaChart data={chartData} margin={{ top: 54, right: 24, left: 12, bottom: 20 }}>
                   <defs>
                     <linearGradient id="colorActual" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.32} />
-                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                      <stop offset="5%" stopColor={CHART.ink} stopOpacity={0.22} />
+                      <stop offset="95%" stopColor={CHART.ink} stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#34d399" stopOpacity={0.38} />
-                      <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
+                      <stop offset="5%" stopColor={CHART.moss} stopOpacity={0.28} />
+                      <stop offset="95%" stopColor={CHART.moss} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="4 4" stroke="#ffffff" opacity={0.05} />
-                  <XAxis dataKey="hour" stroke="#64748b" fontSize={11} interval="preserveStartEnd" />
-                  <YAxis stroke="#64748b" fontSize={11} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                  <Area type="monotone" dataKey="actual" stroke="#22d3ee" fill="url(#colorActual)" name="Historical Load" strokeWidth={2.5} />
-                  <Area type="monotone" dataKey="predicted" stroke="#34d399" fill="url(#colorForecast)" name="Forecast" strokeWidth={2.5} strokeDasharray="6 4" />
-                  <ReferenceLine x="Now" stroke="#f59e0b" strokeDasharray="3 3" label={{ value: "Now", position: 'top', fill: '#f59e0b', fontSize: 12 }} />
-                  <Brush dataKey="hour" height={28} stroke="#22d3ee" fill="#0f172a" fillOpacity={0.5} />
+                  <CartesianGrid strokeDasharray="3 6" stroke={CHART.grid} vertical={false} />
+                  <XAxis
+                    dataKey="hour"
+                    stroke={CHART.axis}
+                    fontSize={10}
+                    interval="preserveStartEnd"
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke={CHART.axis}
+                    fontSize={10}
+                    tickLine={false}
+                    axisLine={false}
+                    width={40}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip
+                    content={<CustomTooltip />}
+                    cursor={{ stroke: 'rgba(17,24,19,0.18)', strokeDasharray: '3 4' }}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    iconType="plainline"
+                    wrapperStyle={{ fontSize: '10px', paddingTop: '8px', textTransform: 'uppercase', letterSpacing: '0.12em' }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="actual"
+                    stroke={CHART.ink}
+                    fill="url(#colorActual)"
+                    name="Historical load"
+                    strokeWidth={2}
+                    animationDuration={900}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="predicted"
+                    stroke={CHART.moss}
+                    fill="url(#colorForecast)"
+                    name="Forecast"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    animationDuration={1100}
+                  />
+                  <ReferenceLine
+                    x="Now"
+                    stroke={CHART.signal}
+                    strokeWidth={1.5}
+                    strokeDasharray="3 3"
+                    label={{ value: 'Now', position: 'top', fill: CHART.moss, fontSize: 10 }}
+                  />
+                  <Brush
+                    dataKey="hour"
+                    height={24}
+                    stroke={CHART.moss}
+                    fill="#F2F0E9"
+                    fillOpacity={0.7}
+                    travellerWidth={8}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             )}
-          </section>
+          </Panel>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {[
-              {
-                label: 'Next Hour',
-                value: predictions.length ? formatGw(predictions[0]) : '-',
-                sub: predictions.length ? formatMw(predictions[0]) : 'Run forecast',
-                icon: Target
-              },
-              {
-                label: 'Forecast Delta',
-                value: stats.delta ? formatMw(Math.abs(stats.delta)) : 'Stable',
-                sub: stats.direction === 'up' ? 'Demand rising' : stats.direction === 'down' ? 'Demand easing' : 'No movement',
-                icon: stats.direction === 'down' ? TrendingDown : TrendingUp
-              },
-              {
-                label: 'Peak Window',
-                value: stats.forecastPeak ? formatGw(stats.forecastPeak) : formatGw(stats.peak),
-                sub: stats.peakStep ? `Forecast step +${stats.peakStep}h` : 'Historical peak',
-                icon: Activity
-              },
-              {
-                label: 'Load Factor',
-                value: `${loadFeatures.loadFactor.toFixed(1)}%`,
-                sub: `Volatility ${loadFeatures.volatility.toFixed(1)}%`,
-                icon: Gauge
-              }
-            ].map((card) => (
-              <div key={card.label} className="bg-slate-900/75 border border-slate-700 rounded-lg p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs font-bold text-slate-500">{card.label}</p>
-                  <card.icon className="text-cyan-300" size={18} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryCards.map((card) => (
+              <div key={card.label} className="surface card-interactive p-5">
+                <div className="flex items-center justify-between">
+                  <p className="label text-ink/35">{card.label}</p>
+                  <card.icon className="text-ink/35" size={15} />
                 </div>
-                <p className="text-3xl font-black text-white">{card.value}</p>
-                <p className="text-sm text-slate-400 mt-2">{card.sub}</p>
+                <p className="mono-num mt-6 text-xl font-medium tracking-[-0.05em]">{card.value}</p>
+                <p className="mt-1.5 text-[0.68rem] text-ink/40">{card.sub}</p>
               </div>
             ))}
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <section className="bg-slate-900/70 rounded-lg border border-slate-700 p-5">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                  <BarChart3 size={16} /> Feature Profile
-                </h3>
-                <span className="text-xs text-slate-500">{WEEKDAY_LABELS[requestPayload.day_of_week]} / {MONTH_LABELS[requestPayload.month - 1]}</span>
-              </div>
-              <div className="h-64">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Panel className="p-5">
+              <PanelHeading
+                icon={BarChart3}
+                title="Feature profile"
+                meta={
+                  <span className="label-sm text-ink/30">
+                    {WEEKDAY_LABELS[requestPayload.day_of_week]} / {MONTH_LABELS[requestPayload.month - 1]}
+                  </span>
+                }
+              />
+              <div className="mt-5 h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={profileRows} margin={{ top: 10, right: 10, left: 4, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="4 4" stroke="#ffffff" opacity={0.05} />
-                    <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                    <YAxis stroke="#64748b" fontSize={11} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="value" fill="#22d3ee" radius={[6, 6, 0, 0]} />
+                    <CartesianGrid strokeDasharray="3 6" stroke={CHART.grid} vertical={false} />
+                    <XAxis dataKey="name" stroke={CHART.axis} fontSize={10} tickLine={false} axisLine={false} />
+                    <YAxis
+                      stroke={CHART.axis}
+                      fontSize={10}
+                      tickLine={false}
+                      axisLine={false}
+                      width={38}
+                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(17,24,19,0.035)' }} />
+                    <Bar dataKey="value" fill={CHART.moss} radius={[3, 3, 0, 0]} animationDuration={900} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </section>
+            </Panel>
 
-            <section className="bg-slate-900/70 rounded-lg border border-slate-700 p-5">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                  <Cpu size={16} /> Request Snapshot
-                </h3>
-                {lastResponseMeta && (
-                  <span className={`text-xs ${lastResponseMeta.fallbackUsed ? 'text-amber-300' : 'text-emerald-300'}`}>
-                    {lastResponseMeta.fallbackUsed ? 'Fallback' : 'Model output'}
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <Panel className="p-5">
+              <PanelHeading
+                icon={Cpu}
+                title="Request snapshot"
+                meta={
+                  lastResponseMeta && (
+                    <span className={`label-sm ${lastResponseMeta.fallbackUsed ? 'text-amber-700' : 'text-moss'}`}>
+                      {lastResponseMeta.fallbackUsed ? 'Fallback' : 'Model output'}
+                    </span>
+                  )
+                }
+              />
+              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {[
                   ['Hour', `${lastRequestPayload.hour}:00`],
-                  ['Day Index', lastRequestPayload.day_of_week],
+                  ['Day index', lastRequestPayload.day_of_week],
                   ['Month', lastRequestPayload.month],
                   ['Horizon', `${lastRequestPayload.horizon || forecastHorizon}h`],
                   ['Lag 1h', formatMw(lastRequestPayload.load_lag_1h)],
-                  ['Rolling Std', formatMw(lastRequestPayload.load_rolling_std_24h)]
+                  ['Rolling std', formatMw(lastRequestPayload.load_rolling_std_24h)]
                 ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg border border-slate-700 bg-slate-950/70 p-3">
-                    <p className="text-xs text-slate-500">{label}</p>
-                    <p className="text-white font-semibold mt-1">{value}</p>
+                  <div key={label} className="rounded-lg border border-ink/10 bg-paper-100 p-3">
+                    <p className="label-sm text-ink/35">{label}</p>
+                    <p className="mono-num mt-1.5 text-xs font-medium text-ink">{value}</p>
                   </div>
                 ))}
               </div>
-              <div className="rounded-lg border border-slate-700 bg-slate-950 p-3">
-                <p className="text-xs text-slate-500 mb-2">Response source</p>
-                <p className="text-sm text-slate-200">
+              <div className="mt-4 rounded-lg border border-ink/10 bg-paper-100 p-3.5">
+                <p className="label-sm text-ink/35">Response source</p>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink/55">
                   {lastResponseMeta
                     ? `${lastResponseMeta.source} returned ${lastResponseMeta.count} forecast step${lastResponseMeta.count === 1 ? '' : 's'}.`
                     : 'Run a forecast to see backend response metadata.'}
                 </p>
-                {lastResponseMeta?.reason && <p className="text-xs text-amber-200 mt-2">{lastResponseMeta.reason}</p>}
+                {lastResponseMeta?.reason && (
+                  <p className="mt-2 text-[0.68rem] leading-relaxed text-amber-700">{lastResponseMeta.reason}</p>
+                )}
               </div>
-            </section>
+            </Panel>
           </div>
         </div>
       </div>

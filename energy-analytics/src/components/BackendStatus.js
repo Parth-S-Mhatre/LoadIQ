@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, AlertCircle, RefreshCw, Wifi, WifiOff, Zap } from 'lucide-react';
 import useBackendHealth from '../hooks/useBackendHealth';
 import { API_CONFIG } from '../config/api';
+import { StatusDot } from './ui';
 
 const BackendStatus = ({ compact = false }) => {
     const {
@@ -15,54 +16,47 @@ const BackendStatus = ({ compact = false }) => {
         loadedModels,
         totalModels,
         backendMode,
+        backendSource,
+        backendLabel,
+        activeBackendUrl,
         consecutiveFailures,
         refresh
     } = useBackendHealth();
 
-    const getStatusColor = () => {
-        if (isChecking) return 'bg-yellow-500';
-        if (isOnline && modelLoaded) return 'bg-emerald-500';
-        if (isOnline && !modelLoaded) return 'bg-amber-500';
-        return 'bg-red-500';
+    const getStatusTone = () => {
+        if (isChecking) return 'amber';
+        if (isOnline && modelLoaded) return 'green';
+        if (isOnline && !modelLoaded) return 'amber';
+        return 'red';
     };
 
     const getStatusText = () => {
         if (isChecking) return 'Checking...';
+        if (isOnline && backendSource === 'railway') return `Railway fallback (${loadedModels}/${totalModels})`;
         if (isOnline && modelLoaded) return 'Online';
-        if (isOnline && !modelLoaded && totalModels > 1) return `Models Loading (${loadedModels}/${totalModels})`;
-        if (isOnline && !modelLoaded) return 'Model Loading';
+        if (isOnline && !modelLoaded && totalModels > 1) return `Models loading (${loadedModels}/${totalModels})`;
+        if (isOnline && !modelLoaded) return 'Model loading';
         return 'Offline';
     };
 
-    const getLatencyColor = () => {
-        if (!latency) return 'text-slate-500';
-        if (latency < 500) return 'text-emerald-400';
-        if (latency < 1000) return 'text-yellow-400';
-        return 'text-red-400';
+    const getLatencyClass = () => {
+        if (!latency) return 'text-ink/35';
+        if (latency < 500) return 'text-moss';
+        if (latency < 1000) return 'text-amber-700';
+        return 'text-clay';
     };
 
     if (compact) {
         return (
             <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-2 bg-slate-950/50 px-3 py-1.5 rounded-full border border-white/5"
+                className="flex items-center gap-2 rounded-full border border-ink/10 bg-paper-50 px-3 py-1.5"
             >
-                <div className="relative">
-                    <div className={`w-2 h-2 rounded-full ${getStatusColor()}`} />
-                    {isOnline && (
-                        <motion.div
-                            className={`absolute inset-0 rounded-full ${getStatusColor()} opacity-50`}
-                            animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                        />
-                    )}
-                </div>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {getStatusText()}
-                </span>
+                <StatusDot tone={getStatusTone()} pulse={isOnline} />
+                <span className="label-sm text-ink/45">{getStatusText()}</span>
                 {latency && (
-                    <span className={`text-[9px] font-black uppercase tracking-widest ${getLatencyColor()}`}>
+                    <span className={`mono-num text-[0.58rem] font-medium ${getLatencyClass()}`}>
                         {latency}ms
                     </span>
                 )}
@@ -72,144 +66,111 @@ const BackendStatus = ({ compact = false }) => {
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-panel border border-white/5 rounded-2xl p-6 shadow-xl"
+            className="surface p-5 sm:p-6"
         >
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between gap-4 border-b border-ink/10 pb-4">
                 <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl ${isOnline ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
-                        {isOnline ? (
-                            <Wifi className={isOnline ? 'text-emerald-400' : 'text-red-400'} size={20} />
-                        ) : (
-                            <WifiOff className="text-red-400" size={20} />
-                        )}
-                    </div>
+                    <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${isOnline ? 'bg-moss/10 text-moss' : 'bg-clay/10 text-clay'}`}>
+                        {isOnline ? <Wifi size={18} /> : <WifiOff size={18} />}
+                    </span>
                     <div>
-                        <h3 className="text-sm font-black text-white uppercase tracking-wider">Backend Status</h3>
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                            LoadIQ Neural Network
-                        </p>
+                        <h3 className="text-sm font-medium">Backend status</h3>
+                        <p className="label-sm mt-1 text-ink/35">LoadIQ neural network</p>
                     </div>
                 </div>
 
                 <button
                     onClick={refresh}
                     disabled={isChecking}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all disabled:opacity-50"
+                    aria-label="Refresh backend status"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-ink/10 text-ink/45 transition-colors hover:border-ink/25 hover:text-ink disabled:opacity-50"
                 >
-                    <RefreshCw
-                        className={`text-slate-400 ${isChecking ? 'animate-spin' : ''}`}
-                        size={16}
-                    />
+                    <RefreshCw className={`${isChecking ? 'animate-spin' : ''}`} size={14} />
                 </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-                {/* Connection Status */}
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5">
-                    <div className="flex items-center gap-2 mb-2">
-                        <div className="relative">
-                            <div className={`w-2.5 h-2.5 rounded-full ${getStatusColor()}`} />
-                            {isOnline && (
-                                <motion.div
-                                    className={`absolute inset-0 rounded-full ${getStatusColor()}`}
-                                    animate={{ scale: [1, 2, 1], opacity: [0.5, 0, 0.5] }}
-                                    transition={{ duration: 2, repeat: Infinity }}
-                                />
-                            )}
-                        </div>
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                            Connection
-                        </span>
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                    <div className="flex items-center gap-2">
+                        <StatusDot tone={getStatusTone()} pulse={isOnline} />
+                        <span className="label-sm text-ink/35">Connection</span>
                     </div>
-                    <p className={`text-lg font-black uppercase tracking-tight ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <p className={`mt-2 text-xs font-medium ${isOnline ? 'text-moss' : 'text-clay'}`}>
                         {getStatusText()}
                     </p>
                 </div>
 
-                {/* Latency */}
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Activity className="text-slate-500" size={10} />
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                            Latency
-                        </span>
+                <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                    <div className="flex items-center gap-2 text-ink/35">
+                        <Activity size={11} />
+                        <span className="label-sm">Latency</span>
                     </div>
-                    <p className={`text-lg font-black uppercase tracking-tight ${getLatencyColor()}`}>
-                        {latency ? `${latency}ms` : '---'}
+                    <p className={`mono-num mt-2 text-xs font-medium ${getLatencyClass()}`}>
+                        {latency ? `${latency}ms` : '—'}
                     </p>
                 </div>
 
-                {/* Model Status */}
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Zap className="text-slate-500" size={10} />
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                            Model
-                        </span>
+                <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                    <div className="flex items-center gap-2 text-ink/35">
+                        <Zap size={11} />
+                        <span className="label-sm">Model</span>
                     </div>
-                    <p className={`text-lg font-black uppercase tracking-tight ${modelLoaded ? 'text-emerald-400' : 'text-slate-600'}`}>
+                    <p className={`mt-2 text-xs font-medium ${modelLoaded ? 'text-moss' : 'text-ink/40'}`}>
                         {modelLoaded
-                            ? totalModels > 1
+                            ? backendSource === 'railway'
                                 ? `Ready (${loadedModels}/${totalModels})`
-                                : 'Ready'
+                                : totalModels > 1
+                                    ? `Ready (${loadedModels}/${totalModels})`
+                                    : 'Ready'
                             : totalModels > 1
                                 ? `Loading (${loadedModels}/${totalModels})`
                                 : 'Loading'}
                     </p>
-                    {backendMode && (
-                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-500">
-                            {backendMode.replace(/_/g, ' ')}
+                    {(backendLabel || backendMode) && (
+                        <p className="label-sm mt-1.5 text-ink/30">
+                            {(backendLabel || backendMode).replace(/_/g, ' ')}
                         </p>
                     )}
                 </div>
 
-                {/* Last Check */}
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5">
-                    <div className="flex items-center gap-2 mb-2">
-                        <RefreshCw className="text-slate-500" size={10} />
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                            Last Check
-                        </span>
+                <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                    <div className="flex items-center gap-2 text-ink/35">
+                        <RefreshCw size={11} />
+                        <span className="label-sm">Last check</span>
                     </div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tight">
-                        {lastCheck ? new Date(lastCheck).toLocaleTimeString() : '---'}
+                    <p className="mono-num mt-2 text-[0.68rem] font-medium text-ink/60">
+                        {lastCheck ? new Date(lastCheck).toLocaleTimeString() : '—'}
                     </p>
                 </div>
             </div>
 
-            {/* Error Message */}
             <AnimatePresence>
                 {error && (
                     <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2"
+                        className="mt-3 overflow-hidden"
                     >
-                        <AlertCircle className="text-red-400 flex-shrink-0 mt-0.5" size={14} />
-                        <div>
-                            <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">
-                                Connection Error
-                            </p>
-                            <p className="text-[10px] text-red-300 font-medium">
-                                {error}
-                            </p>
-                            {consecutiveFailures > 0 && (
-                                <p className="text-[9px] text-red-400/70 font-medium mt-1">
-                                    Failed attempts: {consecutiveFailures}
-                                </p>
-                            )}
+                        <div className="flex items-start gap-2.5 rounded-xl border border-clay/25 bg-clay/[0.06] p-3">
+                            <AlertCircle className="mt-0.5 shrink-0 text-clay" size={13} />
+                            <div>
+                                <p className="label-sm text-clay">Connection error</p>
+                                <p className="mt-1 text-[0.68rem] leading-relaxed text-clay/85">{error}</p>
+                                {consecutiveFailures > 0 && (
+                                    <p className="mt-1 text-[0.62rem] text-clay/65">Failed attempts: {consecutiveFailures}</p>
+                                )}
+                            </div>
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Backend URL Info */}
-            <div className="mt-4 pt-4 border-t border-white/5">
-                <p className="text-[8px] font-black text-slate-600 uppercase tracking-widest">
-                    Endpoint: {API_CONFIG.BASE_URL.replace(/^https?:\/\//, '')}
+            <div className="mt-4 border-t border-ink/10 pt-3">
+                <p className="label-sm truncate text-ink/30">
+                    Endpoint: {(activeBackendUrl || API_CONFIG.BASE_URL).replace(/^https?:\/\//, '')}
                 </p>
             </div>
         </motion.div>

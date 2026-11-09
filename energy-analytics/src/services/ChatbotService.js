@@ -1,8 +1,30 @@
 import axios from 'axios';
 
-const GROQ_API_KEY = process.env.REACT_APP_GROQ_API_KEY || '';
-const GROQ_MODEL = process.env.REACT_APP_GROQ_MODEL || 'llama-3.3-70b-versatile';
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const trimTrailingSlash = (url) => (url || '').replace(/\/+$/, '');
+const resolveChatCompletionUrl = (baseUrl) => {
+  const cleaned = trimTrailingSlash(baseUrl);
+  if (!cleaned) {
+    return '';
+  }
+
+  return cleaned.endsWith('/chat/completions') ? cleaned : `${cleaned}/chat/completions`;
+};
+
+const CHATBOT_API_KEY =
+  process.env.REACT_APP_CHATBOT_API_KEY ||
+  process.env.REACT_APP_GROQ_API_KEY ||
+  '';
+
+const CHATBOT_API_URL = resolveChatCompletionUrl(
+  process.env.REACT_APP_CHATBOT_API_URL ||
+  process.env.REACT_APP_GROQ_API_URL ||
+  'https://api.groq.com/openai/v1'
+);
+
+const CHATBOT_MODEL =
+  process.env.REACT_APP_CHATBOT_MODEL ||
+  process.env.REACT_APP_GROQ_MODEL ||
+  'llama-3.3-70b-versatile';
 
 const ELECTRICITY_PATTERNS = {
   Germany: 'German electricity consumption patterns based on historical data.',
@@ -63,14 +85,18 @@ export const ChatbotService = {
    */
   sendMessage: async (message, country, context = null) => {
     try {
-      if (!GROQ_API_KEY) {
-        throw new Error('Groq API key is missing.');
+      if (!CHATBOT_API_KEY) {
+        throw new Error('Chatbot API key is missing.');
+      }
+
+      if (!CHATBOT_API_URL) {
+        throw new Error('Chatbot API URL is missing.');
       }
 
       const systemPrompt = ChatbotService.getSystemPrompt();
       const contextBlock = formatContextBlock(context);
-      const response = await axios.post(GROQ_API_URL, {
-        model: GROQ_MODEL,
+      const response = await axios.post(CHATBOT_API_URL, {
+        model: CHATBOT_MODEL,
         messages: [
           {
             role: 'system',
@@ -86,7 +112,7 @@ export const ChatbotService = {
       }, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${GROQ_API_KEY}`
+          Authorization: `Bearer ${CHATBOT_API_KEY}`
         }
       });
 
@@ -98,7 +124,7 @@ export const ChatbotService = {
       }
       throw new Error('Unexpected response format from Groq API');
     } catch (error) {
-      console.error('Error communicating with Groq API:', error);
+      console.error('Error communicating with chatbot API:', error);
       const apiMessage = error.response?.data?.error?.message;
       throw new Error(apiMessage || 'Failed to get a response from the chatbot.');
     }
@@ -114,7 +140,10 @@ export const ChatbotService = {
 
     When users ask questions, use this context to answer intelligently. You can compare countries, analyze load patterns, and provide insights based on provided prediction results.
     Treat app context as the most recent source of truth when it is available, and refer to those results directly in your answer.
-    Keep your answers concise, professional, and directly related to energy analytics. Use markdown formatting to make your answers readable.`;
+    Keep your answers concise, professional, and directly related to energy analytics.
+    Format responses for a chat UI with short sections, bold labels, and bullet points when helpful.
+    Do not use markdown headings that start with #, and avoid decorative separators like *** or ---.
+    Prefer clean plain text with light markdown only for emphasis and lists.`;
   },
 
   /**

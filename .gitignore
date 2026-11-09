@@ -30,6 +30,9 @@ DATA/
 venv/
 .env
 
+# Document intelligence MVP data
+Backend/data/
+
 # Secrets
 serviceAccountKey.json
 *.pem

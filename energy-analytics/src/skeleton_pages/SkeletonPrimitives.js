@@ -1,6 +1,6 @@
 import React from 'react';
 
-const pulse = 'animate-pulse bg-white/5';
+const pulse = 'skeleton';
 
 export const SkeletonBlock = ({ className = '' }) => (
     <div className={`${pulse} ${className}`.trim()} />
@@ -11,18 +11,18 @@ export const SkeletonLine = ({ className = '' }) => (
 );
 
 export const SkeletonCard = ({ className = '' }) => (
-    <div className={`rounded-3xl border border-white/5 bg-slate-900/60 ${className}`.trim()} />
+    <div className={`rounded-2xl border border-ink/10 bg-paper-50 ${className}`.trim()} />
 );
 
 export const SkeletonReason = ({ title, subtitle }) => (
     <div className="mb-8 flex flex-col gap-3">
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-500/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.24em] text-indigo-200">
-            <div className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse" />
-            Loading Optimized View
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-ink/10 bg-paper-50 px-3.5 py-1.5">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-moss" />
+            <span className="label-sm text-ink/45">Loading optimised view</span>
         </div>
         <div>
-            <h2 className="text-2xl font-black text-white">{title}</h2>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">{subtitle}</p>
+            <h2 className="text-xl font-medium tracking-[-0.03em] text-ink">{title}</h2>
+            <p className="mt-2 max-w-2xl text-xs leading-relaxed text-ink/45">{subtitle}</p>
         </div>
     </div>
 );

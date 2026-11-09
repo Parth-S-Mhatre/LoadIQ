@@ -4,13 +4,15 @@ model2.py — GB Load Forecast API
 Upgraded to align with energy_model_upgraded.ipynb approach:
   - Replaced LSTM (which required 24-step sequences + its own broken scalers)
     with LightGBM tabular prediction, matching the exact same pattern as model1.py
-  - Target: GB_GBN_load_actual_entsoe_transparency (30-min data)
+  - Target: GB_GBN_load_actual_entsoe_transparency (hourly, resampled from 30-min)
   - Kept: Firebase logging, heuristic fallback, batch/horizon endpoints,
           static file serving — all preserved and cleaned up
   - Fixed: engineer_features() now builds proper lag/rolling features
            instead of the broken hour-one-hot approach
   - Fixed: scaler_X was being refitted on X_train sequences in the old
            notebook — now uses a single consistent joblib-loaded scaler
+  - Fixed: horizon/batch forecasts now advance a real calendar context
+           (hour/day_of_week/month) instead of hardcoding hour=step%24, day=0, month=1
 
 Artifacts required in Backend/Model_assets:
   lgb_gb_model.pkl
@@ -20,10 +22,13 @@ Artifacts required in Backend/Model_assets:
   feature_names_gb.pkl
   train_medians_gb.pkl
 
-NOTE: Run the Model 2 section of your notebook (30min data, GB target)
-with the same upgraded pattern to generate these .pkl files.
-If GB-specific artifacts are missing, this service can temporarily
-fallback to non-GB artifact names in the same directories.
+Generate them with:
+
+    python Backend/train_gb_artifacts.py
+
+If GB-specific artifacts are missing, Model2 refuses to serve the legacy DE/LU
+artifacts and prediction endpoints return HTTP 503. Set
+ALLOW_NON_GB_FALLBACK=true only for a deliberate local experiment.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -93,6 +98,21 @@ app.add_middleware(
 )
 
 print("🔥 BACKEND RUNNING FROM:", __file__)
+
+
+class ArtifactUnavailable(RuntimeError):
+    """Raised when the GB-specific artifacts required by Model2 are missing."""
+
+
+# The original service quietly fell back to the DE/LU artifacts.  That made
+# the GB endpoint return DE-scale predictions while still claiming success.
+# Fail loudly by default; set ALLOW_NON_GB_FALLBACK=true only for deliberate
+# local experiments with the old artifacts.
+ALLOW_NON_GB_FALLBACK = os.getenv("ALLOW_NON_GB_FALLBACK", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # ---------------------------------------------------
 # Optional Firebase logging (disabled by default for no-NoSQL setup)
@@ -183,9 +203,24 @@ def _load_first_available(candidates: List[str]):
     last_error = None
     for artifact_name in candidates:
         try:
-            return _load(artifact_name), artifact_name
+            artifact = _load(artifact_name)
         except FileNotFoundError as e:
             last_error = e
+            continue
+
+        # Refuse to serve the DE/LU artifacts from the GB service unless the
+        # operator explicitly opted into that behaviour.
+        if "_gb" not in artifact_name and not ALLOW_NON_GB_FALLBACK:
+            raise ArtifactUnavailable(
+                "GB-specific Model2 artifacts are missing. "
+                f"Found non-GB fallback '{artifact_name}', which would return "
+                "DE/LU-scale predictions from the GB endpoint. "
+                "Run `python Backend/train_gb_artifacts.py` or set "
+                "ALLOW_NON_GB_FALLBACK=true only for a deliberate local experiment."
+            )
+
+        return artifact, artifact_name
+
     if last_error is not None:
         raise last_error
     raise FileNotFoundError("No artifact candidates provided.")
@@ -193,6 +228,19 @@ def _load_first_available(candidates: List[str]):
 
 def _checked_artifact_dirs() -> List[str]:
     return [str(path) for path in ARTIFACT_DIRS]
+
+
+def _gb_artifacts_available() -> bool:
+    """Return True when every GB-specific artifact is present on disk."""
+    required = [
+        "lgb_gb_model.pkl",
+        "xgb_gb_model.pkl",
+        "ridge_gb_model.pkl",
+        "X_scaler_gb.pkl",
+        "feature_names_gb.pkl",
+        "train_medians_gb.pkl",
+    ]
+    return all(any((directory / name).exists() for directory in ARTIFACT_DIRS) for name in required)
 
 
 print("\n🚀 Loading GB model artifacts…")
@@ -226,7 +274,7 @@ def _set_artifact_error(message: Optional[str]):
 def _refresh_artifact_mode():
     global USING_GB_ARTIFACTS
     loaded_names = list(LOADED_ARTIFACTS.values())
-    USING_GB_ARTIFACTS = bool(loaded_names) and all(name.endswith("_gb.pkl") for name in loaded_names)
+    USING_GB_ARTIFACTS = bool(loaded_names) and all("_gb" in name for name in loaded_names)
 
 
 def _ensure_common(key: str):
@@ -417,6 +465,12 @@ class BatchInput(BaseModel):
     loads: Optional[List[List[float]]] = None
     scenarios: Optional[List[List[float]]] = None
 
+    # Optional forecast context. The frontend already sends these; keeping
+    # them out of the schema silently dropped the values.
+    hour: Optional[int] = None
+    day_of_week: Optional[int] = None
+    month: Optional[int] = None
+
     @field_validator("last_24_hours")
     @classmethod
     def check_last24(cls, v):
@@ -425,6 +479,27 @@ class BatchInput(BaseModel):
         if len(v) != 24:
             raise ValueError("last_24_hours must contain exactly 24 values")
         return [float(x) for x in v]
+
+    @field_validator("hour")
+    @classmethod
+    def check_batch_hour(cls, v):
+        if v is not None and not 0 <= v <= 23:
+            raise ValueError("hour must be 0–23")
+        return v
+
+    @field_validator("day_of_week")
+    @classmethod
+    def check_batch_dow(cls, v):
+        if v is not None and not 0 <= v <= 6:
+            raise ValueError("day_of_week must be 0 (Mon) – 6 (Sun)")
+        return v
+
+    @field_validator("month")
+    @classmethod
+    def check_batch_month(cls, v):
+        if v is not None and not 1 <= v <= 12:
+            raise ValueError("month must be 1–12")
+        return v
 
     @field_validator("horizon")
     @classmethod
@@ -523,6 +598,10 @@ def _run_prediction(input_dict: dict) -> dict:
     if history:
         input_dict = _populate_lags_from_history(dict(input_dict), history, feature_names)
 
+    # Keep the derived weekend flag consistent with the supplied calendar.
+    if "is_weekend" in feature_names and "is_weekend" not in input_dict:
+        input_dict["is_weekend"] = int(int(input_dict.get("day_of_week", 0)) >= 5)
+
     X_raw, X_scaled = _build_feature_row(input_dict, feature_names, train_medians, scaler_obj)
 
     lgb_pred = float(lgb_model.predict(X_raw)[0]) if lgb_model is not None else None
@@ -588,7 +667,45 @@ def _heuristic_fallback(history: List[float]) -> float:
     return float(np.clip(predicted, lo, hi))
 
 
-def _predict_horizon(history: List[float], horizon: int, model_choice: str) -> List[dict]:
+def _calendar_for_step(
+    step: int,
+    start_hour: Optional[int],
+    start_day_of_week: Optional[int],
+    start_month: Optional[int],
+) -> dict:
+    """Build a calendar context for iterative forecasts.
+
+    Uses the request's context when supplied and falls back to the current UTC
+    time.  The old implementation hardcoded hour=step%24, day=0, month=1,
+    which made the calendar controls in the UI meaningless.
+    """
+    now = datetime.utcnow()
+    hour = now.hour if start_hour is None else int(start_hour)
+    day_of_week = now.weekday() if start_day_of_week is None else int(start_day_of_week)
+    month = now.month if start_month is None else int(start_month)
+
+    total_hours = hour + step
+    day_offset = total_hours // 24
+    hour = total_hours % 24
+    day_of_week = (day_of_week + day_offset) % 7
+    month = ((month - 1 + day_offset // 30) % 12) + 1
+
+    return {
+        "hour": hour,
+        "day_of_week": day_of_week,
+        "month": month,
+        "is_weekend": int(day_of_week >= 5),
+    }
+
+
+def _predict_horizon(
+    history: List[float],
+    horizon: int,
+    model_choice: str,
+    start_hour: Optional[int] = None,
+    start_day_of_week: Optional[int] = None,
+    start_month: Optional[int] = None,
+) -> List[dict]:
     """
     Iterative multi-step forecast.
     Each step: predict next load → append to history → repeat.
@@ -598,9 +715,7 @@ def _predict_horizon(history: List[float], horizon: int, model_choice: str) -> L
 
     for step in range(horizon):
         input_dict = {
-            "hour":        (step % 24),
-            "day_of_week": 0,               # simplified; caller can pass a schedule if needed
-            "month":       1,
+            **_calendar_for_step(step, start_hour, start_day_of_week, start_month),
             "model":       model_choice,
             "last_24_hours": history[-24:],
         }
@@ -610,6 +725,8 @@ def _predict_horizon(history: List[float], horizon: int, model_choice: str) -> L
             result["step"] = step + 1
             results.append(result)
             history.append(pred)
+        except ArtifactUnavailable:
+            raise
         except Exception as e:
             fallback = _heuristic_fallback(history[-24:])
             log_error(str(e), context=f"horizon_step_{step+1}")
@@ -625,23 +742,30 @@ def _predict_horizon(history: List[float], horizon: int, model_choice: str) -> L
     return results
 
 
-def _predict_batch_sequences(sequences: List[List[float]], model_choice: str) -> dict:
+def _predict_batch_sequences(
+    sequences: List[List[float]],
+    model_choice: str,
+    start_hour: Optional[int] = None,
+    start_day_of_week: Optional[int] = None,
+    start_month: Optional[int] = None,
+) -> dict:
     """
     Predict one next-step value for each provided 24-hour sequence.
     This matches frontend analytics payloads that send `loads`.
     """
+    context = _calendar_for_step(0, start_hour, start_day_of_week, start_month)
     predictions = []
     for idx, history in enumerate(sequences):
         input_dict = {
-            "hour": 0,
-            "day_of_week": 0,
-            "month": 1,
+            **context,
             "model": model_choice,
             "last_24_hours": history,
         }
         try:
             result = _run_prediction(input_dict)
             predictions.append(result)
+        except ArtifactUnavailable:
+            raise
         except Exception as e:
             fallback = _heuristic_fallback(history)
             log_error(str(e), context=f"batch_sequence_{idx+1}")
@@ -677,6 +801,9 @@ async def predict(data: LoadInput):
         return await run_in_threadpool(_run_prediction, data.model_dump())
     except HTTPException:
         raise
+    except ArtifactUnavailable as e:
+        log_error(str(e), context="predict_endpoint")
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         log_error(str(e), context="predict_endpoint")
         raise HTTPException(status_code=400, detail=str(e))
@@ -696,6 +823,9 @@ async def predict_batch(data: BatchInput):
                 data.last_24_hours,
                 data.horizon,
                 data.model,
+                data.hour,
+                data.day_of_week,
+                data.month,
             )
             sources = {r.get("model_used", "ensemble") for r in results}
             return {
@@ -704,11 +834,19 @@ async def predict_batch(data: BatchInput):
                 "mode":              "iterative_forecast",
                 "prediction_source": sources.pop() if len(sources) == 1 else "mixed",
                 "fallback_used":     any(r.get("fallback_used", False) for r in results),
+                "artifact_mode":     "gb",
             }
 
         sequences = data.loads or data.scenarios
         if sequences:
-            return await run_in_threadpool(_predict_batch_sequences, sequences, data.model)
+            return await run_in_threadpool(
+                _predict_batch_sequences,
+                sequences,
+                data.model,
+                data.hour,
+                data.day_of_week,
+                data.month,
+            )
 
         raise HTTPException(
             status_code=422,
@@ -716,6 +854,9 @@ async def predict_batch(data: BatchInput):
         )
     except HTTPException:
         raise
+    except ArtifactUnavailable as e:
+        log_error(str(e), context="predict_batch_endpoint")
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         log_error(str(e), context="predict_batch_endpoint")
         raise HTTPException(status_code=400, detail=str(e))
@@ -748,18 +889,25 @@ def list_features():
 @app.get("/health")
 def health():
     feature_count = len(COMMON_CACHE["feature_names"]) if "feature_names" in COMMON_CACHE else 0
+    gb_available = _gb_artifacts_available()
+    healthy = ARTIFACT_ERROR is None and (gb_available or ALLOW_NON_GB_FALLBACK)
     return {
-        "status":        "ok" if ARTIFACT_ERROR is None else "degraded",
+        "status":        "ok" if healthy else "degraded",
         "models_loaded": sorted(list(MODEL_CACHE.keys())),
         "feature_count": feature_count,
         "default_model": "ensemble",
-        "artifact_mode": "gb" if USING_GB_ARTIFACTS else "fallback_non_gb",
+        "models_available": (
+            ["lightgbm", "xgboost", "ridge", "ensemble"] if gb_available else []
+        ),
+        "artifact_mode": "gb" if gb_available else "fallback_non_gb",
+        "gb_artifacts_available": gb_available,
+        "allow_non_gb_fallback": ALLOW_NON_GB_FALLBACK,
         "loaded_artifacts": LOADED_ARTIFACTS,
-        "fallback_available": True,
+        "fallback_available": ALLOW_NON_GB_FALLBACK,
         "on_demand_loading": True,
         "unload_inactive_models": UNLOAD_INACTIVE_MODELS,
         "checked_directories": _checked_artifact_dirs(),
-        "artifact_error": ARTIFACT_ERROR,
+        "artifact_error": ARTIFACT_ERROR if not gb_available else None,
     }
 
 

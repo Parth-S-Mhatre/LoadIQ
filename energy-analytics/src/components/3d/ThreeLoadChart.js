@@ -1,6 +1,6 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text, Stars, Preload } from '@react-three/drei';
+import { OrbitControls, Text, Preload } from '@react-three/drei';
 import * as THREE from 'three';
 
 const Bar = ({ position, height, color, label, isPredicted }) => {
@@ -25,7 +25,7 @@ const Bar = ({ position, height, color, label, isPredicted }) => {
             >
                 <boxGeometry args={[0.8, 1, 0.8]} />
                 <meshStandardMaterial
-                    color={hovered ? '#ffffff' : color}
+                    color={hovered ? '#FFFFFF' : color}
                     emissive={color}
                     emissiveIntensity={hovered ? 0.8 : 0.2}
                     metalness={0.6}
@@ -57,10 +57,10 @@ const ThreeLoadChartComponent = ({ safeData, safePredicted, getNormalizedHeight 
     return (
         <>
             {/* Lighting - Enhanced for visibility without Environment */}
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[15, 25, 15]} intensity={1.4} color="#ffffff" castShadow />
-            <pointLight position={[-10, 10, 15]} intensity={0.9} color="#6366f1" />
-            <spotLight position={[5, 30, 10]} angle={0.5} penumbra={1} intensity={1.2} color="#818cf8" />
+            <ambientLight intensity={0.75} />
+            <directionalLight position={[15, 25, 15]} intensity={1.15} color="#F2F0E9" castShadow />
+            <pointLight position={[-10, 10, 15]} intensity={0.7} color="#D8F24D" />
+            <spotLight position={[5, 30, 10]} angle={0.5} penumbra={1} intensity={1} color="#3A6B8A" />
 
             {/* Bars - Center the graph */}
             <group position={[-totalBars / 2 + 0.5, 0, 0]}>
@@ -71,7 +71,7 @@ const ThreeLoadChartComponent = ({ safeData, safePredicted, getNormalizedHeight 
                         key={`hist-${i}`}
                         position={[i, 0, 0]}
                         height={getNormalizedHeight(val)}
-                        color="#6366f1"
+                        color="#D2CDBE"
                         label={`H${i}`}
                     />
                 ))}
@@ -82,7 +82,7 @@ const ThreeLoadChartComponent = ({ safeData, safePredicted, getNormalizedHeight 
                         key={`pred-${i}`}
                         position={[safeData.length + i, 0, 0]}
                         height={getNormalizedHeight(val)}
-                        color="#10b981"
+                        color="#D8F24D"
                         label={`P${i + 1}`}
                         isPredicted={true}
                     />
@@ -92,7 +92,7 @@ const ThreeLoadChartComponent = ({ safeData, safePredicted, getNormalizedHeight 
                 <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-0.5, -0.5, 0]}>
                     <planeGeometry args={[totalBars + 5, 20]} />
                     <meshStandardMaterial
-                        color="#1e293b"
+                        color="#24302A"
                         roughness={0.2}
                         metalness={0.5}
                         transparent
@@ -111,8 +111,8 @@ const ThreeLoadChartComponent = ({ safeData, safePredicted, getNormalizedHeight 
                 makeDefault
             />
 
-            {/* Stars Background */}
-            <Stars radius={150} depth={80} count={2000} factor={4} saturation={0} fade speed={0.3} />
+            {/* Ground grid */}
+            <gridHelper args={[60, 60, '#24302A', '#18231D']} position={[0, -0.5, 0]} />
             <Preload all />
         </>
     );
@@ -167,17 +167,17 @@ const ThreeLoadChart = ({ data = [], predicted = [] }) => {
     }, []);
 
     return (
-        <div className="h-[400px] w-full bg-[#0f172a] rounded-2xl overflow-hidden border border-slate-700 relative" ref={canvasRef}>
+        <div className="relative h-full min-h-[300px] w-full overflow-hidden rounded-xl bg-[#0E1712]" ref={canvasRef}>
             {/* Legend Overlay */}
-            <div className="absolute top-4 left-4 z-10 flex gap-4 pointer-events-none">
+            <div className="pointer-events-none absolute left-4 top-4 z-10 flex gap-4">
                 <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 bg-indigo-500 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.5)]"></div>
-                    <span className="text-xs font-bold text-slate-300">Historical</span>
+                    <span className="h-2 w-2 rounded-full bg-[#D2CDBE]" />
+                    <span className="label-sm text-paper/55">Historical</span>
                 </div>
                 {safePredicted.length > 0 && (
                     <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
-                        <span className="text-xs font-bold text-slate-300">Predicted</span>
+                        <span className="h-2 w-2 rounded-full bg-signal" />
+                        <span className="label-sm text-paper/55">Predicted</span>
                     </div>
                 )}
             </div>
@@ -191,7 +191,7 @@ const ThreeLoadChart = ({ data = [], predicted = [] }) => {
                     failIfMajorPerformanceCaveat: false
                 }}
                 onCreated={({ gl }) => {
-                    gl.setClearColor('#0f172a', 1);
+                    gl.setClearColor('#0E1712', 1);
                 }}
                 onError={(error) => console.warn('Canvas error:', error)}
             >

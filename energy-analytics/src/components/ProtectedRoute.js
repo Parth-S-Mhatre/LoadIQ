@@ -8,11 +8,11 @@ const ProtectedRoute = ({ children }) => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
-                <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-600/30 mb-4 animate-pulse">
-                    <Zap className="text-white" size={32} />
+            <div className="flex min-h-screen flex-col items-center justify-center bg-paper text-ink">
+                <div className="mb-4 flex h-14 w-14 animate-pulse items-center justify-center rounded-xl border border-ink/10 bg-ink text-signal">
+                    <Zap size={26} />
                 </div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Authenticating...</p>
+                <p className="label text-ink/40">Authenticating session</p>
             </div>
         );
     }

@@ -1,4 +1,11 @@
-import { API_CONFIG, buildModel1Url, buildModel2Url, fetchWithRetry } from '../config/api';
+import {
+  API_CONFIG,
+  buildModel1Url,
+  buildModel2Url,
+  buildBackupModel1Url,
+  buildBackupModel2Url,
+  fetchWithBackendFallback
+} from '../config/api';
 
 export const AnalyticsService = {
   extractPredictionItem: (item, defaultSource = 'ml_model') => {
@@ -147,23 +154,23 @@ export const AnalyticsService = {
             loads: loads || scenarios || []
           };
 
-      const response = await fetchWithRetry(
+      const { response, source } = await fetchWithBackendFallback(
         buildModel2Url(API_CONFIG.ENDPOINTS.PREDICT_BATCH),
+        buildBackupModel2Url(API_CONFIG.ENDPOINTS.PREDICT_BATCH),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         },
-        3,
         API_CONFIG.TIMEOUTS.BATCH_PREDICTION
       );
 
-      if (!response.ok) {
-        throw new Error(`Backend responded with ${response.status}`);
-      }
-
       const responsePayload = await response.json();
-      return AnalyticsService.normalizePredictionResponse(responsePayload);
+      return AnalyticsService.normalizePredictionResponse({
+        ...responsePayload,
+        prediction_source: responsePayload?.prediction_source || (source === 'fallback' ? 'railway_fallback' : 'ml_model'),
+        backend_source: source
+      });
     } catch (error) {
       console.warn('Batch prediction fallback used:', error);
       const shouldFallback =
@@ -190,8 +197,9 @@ export const AnalyticsService = {
   getSinglePrediction: async (last24Hours) => {
     try {
       const now = new Date();
-      const response = await fetchWithRetry(
+      const { response, source } = await fetchWithBackendFallback(
         buildModel1Url(API_CONFIG.ENDPOINTS.PREDICT),
+        buildBackupModel1Url(API_CONFIG.ENDPOINTS.PREDICT),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -203,16 +211,14 @@ export const AnalyticsService = {
             last_24_hours: last24Hours
           })
         },
-        3,
         API_CONFIG.TIMEOUTS.PREDICTION
       );
 
-      if (!response.ok) {
-        throw new Error(`Backend responded with ${response.status}`);
-      }
-
       const payload = await response.json();
-      return AnalyticsService.extractPredictionItem(payload).value;
+      return AnalyticsService.extractPredictionItem({
+        ...payload,
+        prediction_source: payload?.prediction_source || (source === 'fallback' ? 'railway_fallback' : 'ml_model')
+      }).value;
     } catch (error) {
       console.warn('Single prediction fallback used:', error);
       if (

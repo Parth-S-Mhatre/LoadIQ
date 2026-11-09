@@ -1,0 +1,31 @@
+{
+  "target": "GB_GBN_load_actual_entsoe_transparency",
+  "feature_count": 25,
+  "train_rows": 40280,
+  "test_rows": 10070,
+  "train_start": "2015-01-01 23:00:00+00:00",
+  "train_end": "2019-08-08 06:00:00+00:00",
+  "test_start": "2019-08-08 07:00:00+00:00",
+  "test_end": "2020-09-30 23:00:00+00:00",
+  "lightgbm": {
+    "mae_mw": 950.93,
+    "rmse_mw": 1469.17,
+    "mape_pct": 3.341
+  },
+  "xgboost": {
+    "mae_mw": 999.11,
+    "rmse_mw": 1576.43,
+    "mape_pct": 3.523
+  },
+  "ridge": {
+    "mae_mw": 1046.11,
+    "rmse_mw": 1637.96,
+    "mape_pct": 3.675
+  },
+  "ensemble": {
+    "mae_mw": 959.62,
+    "rmse_mw": 1496.44,
+    "mape_pct": 3.378
+  },
+  "created_at": "2026-11-09T10:18:59.358408+00:00"
+}

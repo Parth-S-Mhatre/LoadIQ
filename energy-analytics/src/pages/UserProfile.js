@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserHistoryService } from '../services/UserHistoryService';
+import { Badge, EASE, Logo, StatusDot, buttonClass } from '../components/ui';
 
 const createDefaultProfile = (user) => ({
   fullName: user?.displayName || '',
@@ -131,6 +132,16 @@ const normalizeHistoryEntry = (item, index) => {
   };
 };
 
+const Panel = ({ children, className = '' }) => (
+  <div className={`surface ${className}`.trim()}>{children}</div>
+);
+
+const FieldLabel = ({ children }) => (
+  <span className="label-sm mb-2 block text-ink/40">{children}</span>
+);
+
+const inputClass = 'h-11 w-full rounded-lg border border-ink/15 bg-paper-50 px-3.5 text-sm text-ink transition-all duration-200 placeholder:text-ink/30 hover:border-ink/25 focus:border-ink focus:bg-white focus:outline-none focus:ring-2 focus:ring-signal-300/60';
+
 const UserProfile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -155,7 +166,20 @@ const UserProfile = () => {
       setHistoryLoading(true);
 
       const localProfile = JSON.parse(localStorage.getItem(`userProfile_${user.uid}`) || 'null');
-      const cloudProfile = await UserHistoryService.getUserProfile(user.uid);
+
+      let cloudProfile = null;
+      try {
+        cloudProfile = await withTimeout(
+          UserHistoryService.getUserProfile(user.uid),
+          FIREBASE_SAVE_TIMEOUT_MS,
+          'Firebase profile fetch timed out.'
+        );
+      } catch (error) {
+        if (!isOfflineFirestoreError(error) && !String(error?.message || '').includes('timed out')) {
+          console.error('Failed to load cloud profile:', error);
+        }
+      }
+
       const pendingInvite = JSON.parse(localStorage.getItem('pendingInviteContext') || 'null');
       const mergedProfile = {
         ...createDefaultProfile(user),
@@ -171,8 +195,20 @@ const UserProfile = () => {
         setInviteContext(null);
       }
 
-      const history = await UserHistoryService.getUserAnalytics(user.uid);
-      const normalizedHistory = history.length
+      let history = [];
+      try {
+        history = await withTimeout(
+          UserHistoryService.getUserAnalytics(user.uid),
+          FIREBASE_SAVE_TIMEOUT_MS,
+          'Firebase history fetch timed out.'
+        );
+      } catch (error) {
+        if (!isOfflineFirestoreError(error) && !String(error?.message || '').includes('timed out')) {
+          console.error('Failed to load cloud history:', error);
+        }
+      }
+
+      const normalizedHistory = Array.isArray(history) && history.length
         ? history.map(normalizeHistoryEntry)
         : JSON.parse(localStorage.getItem(`analyticsHistory_${user.uid}`) || '[]').map(normalizeHistoryEntry);
 
@@ -398,7 +434,7 @@ const UserProfile = () => {
         y = margin;
       };
 
-      doc.setFillColor(15, 23, 42);
+      doc.setFillColor(17, 24, 19);
       doc.rect(0, 0, pageWidth, 96, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
@@ -407,11 +443,11 @@ const UserProfile = () => {
       y += 24;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
-      doc.setTextColor(203, 213, 225);
+      doc.setTextColor(216, 242, 77);
       doc.text(`Generated ${new Date().toLocaleString()}`, margin, y);
       y = 126;
 
-      addText('Workspace Summary', margin, 14, 'bold', [15, 23, 42]);
+      addText('Workspace Summary', margin, 14, 'bold', [17, 24, 19]);
       y += 24;
       const summaryRows = [
         ['Analyst', formData.fullName || user?.displayName || 'Not set'],
@@ -427,12 +463,12 @@ const UserProfile = () => {
       summaryRows.forEach(([label, value]) => {
         ensureSpace(24);
         addText(label, margin, 9, 'bold', [71, 85, 105]);
-        addText(value, margin + 150, 10, 'normal', [15, 23, 42]);
+        addText(value, margin + 150, 10, 'normal', [17, 24, 19]);
         y += 20;
       });
 
       y += 18;
-      addText('Forecast Sessions', margin, 14, 'bold', [15, 23, 42]);
+      addText('Forecast Sessions', margin, 14, 'bold', [17, 24, 19]);
       y += 24;
 
       if (!analyticsHistory.length) {
@@ -442,10 +478,10 @@ const UserProfile = () => {
       analyticsHistory.forEach((item, index) => {
         ensureSpace(120);
         doc.setDrawColor(226, 232, 240);
-        doc.setFillColor(248, 250, 252);
+        doc.setFillColor(246, 244, 238);
         doc.roundedRect(margin, y - 14, pageWidth - margin * 2, 100, 8, 8, 'FD');
 
-        addText(`Session ${index + 1}`, margin + 16, 11, 'bold', [15, 23, 42]);
+        addText(`Session ${index + 1}`, margin + 16, 11, 'bold', [17, 24, 19]);
         addText(new Date(item.timestamp).toLocaleString(), margin + 110, 9, 'normal', [71, 85, 105]);
         y += 22;
 
@@ -520,36 +556,43 @@ const UserProfile = () => {
     { id: 'notifications', label: 'Notifications', icon: Bell }
   ];
 
+  const summaryStats = [
+    ['Runs', analyticsSummary.totalRuns],
+    ['Latest', Math.round(analyticsSummary.latestPrediction).toLocaleString()],
+    ['Avg next hour', Math.round(analyticsSummary.averageNextHour).toLocaleString()],
+    ['Fallback rate', `${analyticsSummary.fallbackRate.toFixed(0)}%`]
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-paper text-ink">
       <AnimatePresence>
         {saveDoneMessage && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 backdrop-blur-sm px-6"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 px-6 backdrop-blur-sm"
           >
             <motion.div
-              initial={{ scale: 0.82, y: 18 }}
+              initial={{ scale: 0.9, y: 18 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: -8 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-              className="w-full max-w-sm rounded-3xl border border-emerald-400/30 bg-slate-900/95 p-8 text-center shadow-2xl shadow-emerald-500/10"
+              transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+              className="w-full max-w-sm rounded-2xl border border-ink/15 bg-paper-50 p-8 text-center shadow-lift"
             >
               <motion.div
                 initial={{ scale: 0, rotate: -18 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ type: 'spring', stiffness: 320, damping: 16, delay: 0.08 }}
-                className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-400/25"
+                className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-signal text-ink"
               >
-                <CheckCircle size={42} strokeWidth={2.5} />
+                <CheckCircle size={32} strokeWidth={2.2} />
               </motion.div>
               <motion.h2
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.16 }}
-                className="text-2xl font-black text-white"
+                className="text-xl font-medium tracking-[-0.03em]"
               >
                 {saveDoneMessage}
               </motion.h2>
@@ -557,7 +600,7 @@ const UserProfile = () => {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.24 }}
-                className="mt-2 text-sm text-slate-300"
+                className="mt-2 text-sm text-ink/45"
               >
                 Your workspace details are ready.
               </motion.p>
@@ -566,174 +609,202 @@ const UserProfile = () => {
         )}
       </AnimatePresence>
 
-      <div className="bg-slate-900/60 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
+      {/* Header */}
+      <header className="border-b border-ink/10 bg-paper/85 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-3xl bg-gradient-to-br from-cyan-500 via-indigo-500 to-sky-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                <Sparkles className="text-white" size={24} />
+              <button onClick={() => navigate('/dashboard')} aria-label="LoadIQ home" className="shrink-0">
+                <Logo />
+              </button>
+              <span className="hidden h-9 w-px bg-ink/10 sm:block" />
+              <div className="hidden sm:block">
+                <p className="label-sm text-ink/35">Operator workspace</p>
+                <p className="mt-1 text-sm font-medium">Account &amp; history</p>
               </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <button onClick={() => navigate('/dashboard')} className={buttonClass('outline', 'md')}>
+                <ArrowLeft size={15} />
+                Back to dashboard
+              </button>
+              <div className="flex items-center gap-2.5 rounded-full border border-ink/10 bg-paper-50 px-3 py-2">
+                <StatusDot tone="green" />
+                <span className="label-sm text-ink/45">Signed in</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-6 border-t border-ink/10 pt-7 lg:grid-cols-[1.2fr_1fr] lg:items-end">
+            <div className="flex items-start gap-4">
+              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-ink/10 bg-ink text-signal">
+                <Sparkles size={22} />
+              </span>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-white">Analysis Workspace</h1>
-                <p className="text-slate-400 text-sm">
-                  Profile, forecasting history, and collaboration settings in one place.
+                <p className="label text-ink/35">Grid intelligence · personal</p>
+                <h1 className="mt-2 text-[1.7rem] leading-tight tracking-[-0.04em] sm:text-[2rem]">
+                  {formData.fullName ? `${formData.fullName.split(' ')[0]}'s workspace` : 'Analysis workspace'}
+                </h1>
+                <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-ink/50">
+                  Profile, forecast history and collaboration settings in one place.
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-col items-stretch gap-3 lg:items-end">
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-800/80 hover:bg-slate-700/80 px-5 py-3 text-white transition-all"
-              >
-                <ArrowLeft size={16} />
-                Back to Dashboard
-              </button>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-              <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Runs</p>
-                <p className="text-xl sm:text-2xl font-black text-white">{analyticsSummary.totalRuns}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Latest</p>
-                <p className="text-xl sm:text-2xl font-black text-white">{Math.round(analyticsSummary.latestPrediction).toLocaleString()}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Avg Next Hour</p>
-                <p className="text-xl sm:text-2xl font-black text-white">{Math.round(analyticsSummary.averageNextHour).toLocaleString()}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Fallback Rate</p>
-                <p className="text-xl sm:text-2xl font-black text-white">{analyticsSummary.fallbackRate.toFixed(0)}%</p>
-              </div>
-              </div>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-ink/10 bg-ink/10 sm:grid-cols-4">
+              {summaryStats.map(([label, value]) => (
+                <div key={label} className="bg-paper-50 px-3.5 py-3">
+                  <p className="label-sm text-ink/35">{label}</p>
+                  <p className="mono-num mt-1.5 text-sm font-medium">{value}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="mb-8 flex gap-2 overflow-x-auto pb-2 no-scrollbar sm:flex-wrap">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex shrink-0 items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 rounded-xl transition-all ${
-                activeTab === tab.id
-                  ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/20'
-                  : 'bg-slate-800/60 text-slate-300 hover:bg-slate-700/60'
-              }`}
-            >
-              <tab.icon size={18} />
-              <span className="font-semibold whitespace-nowrap">{tab.label}</span>
-            </button>
-          ))}
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+        {/* Tabs */}
+        <div className="mb-6 flex gap-1.5 overflow-x-auto rounded-full border border-ink/10 bg-paper-50 p-1.5 no-scrollbar sm:w-fit">
+          {tabs.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-[0.75rem] font-medium transition-colors duration-200 ${
+                  active ? 'text-paper' : 'text-ink/50 hover:text-ink'
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="profile-tab-active"
+                    className="absolute inset-0 rounded-full bg-ink"
+                    transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+                  />
+                )}
+                <tab.icon size={15} className="relative z-10" />
+                <span className="relative z-10 whitespace-nowrap">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         <AnimatePresence mode="wait">
           {activeTab === 'profile' && (
             <motion.div
               key="profile"
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: EASE }}
+              className="space-y-4"
             >
               {isNewUser && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-5">
-                  <div className="flex items-center gap-3 mb-2">
-                    <AlertTriangle className="text-amber-400" size={22} />
-                    <h3 className="text-lg font-bold text-amber-300">Complete your analyst setup</h3>
+                <div className="rounded-xl border border-amber-600/25 bg-amber-50 p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 shrink-0 text-amber-700" size={18} />
+                    <div>
+                      <h3 className="text-sm font-medium text-amber-900">Complete your analyst setup</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-amber-800/70">
+                        Fill out your profile and workspace details so your forecast history and collaboration link stay organized.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-slate-300 text-sm">
-                    Fill out your profile and workspace details so your forecast history and collaboration link stay organized.
-                  </p>
                 </div>
               )}
 
               {inviteContext && (
-                <div className="bg-cyan-500/10 border border-cyan-400/20 rounded-2xl p-5">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Users className="text-cyan-300" size={22} />
-                    <h3 className="text-lg font-bold text-cyan-200">Workspace invite detected</h3>
+                <div className="rounded-xl border border-moss/20 bg-moss/[0.06] p-4 sm:p-5">
+                  <div className="flex items-start gap-3">
+                    <Users className="mt-0.5 shrink-0 text-moss" size={18} />
+                    <div>
+                      <h3 className="text-sm font-medium text-moss">Workspace invite detected</h3>
+                      <p className="mt-1 text-xs leading-relaxed text-ink/55">
+                        You were invited to join{' '}
+                        <span className="font-semibold text-ink">{inviteContext.workspaceName || 'a LoadIQ workspace'}</span>
+                        {inviteContext.invitedBy ? ` by ${inviteContext.invitedBy}` : ''}. These fields are pre-filled below.
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-slate-300 text-sm">
-                    You were invited to join <span className="font-semibold text-white">{inviteContext.workspaceName || 'a LoadIQ workspace'}</span>
-                    {inviteContext.invitedBy ? ` by ${inviteContext.invitedBy}` : ''}. These fields are pre-filled below.
-                  </p>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="xl:col-span-2 rounded-3xl border border-white/10 bg-slate-900/65 p-4 sm:p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Full Name *</label>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <Panel className="p-5 sm:p-6 xl:col-span-2">
+                  <div className="border-b border-ink/10 pb-4">
+                    <p className="label text-ink/35">Personal details</p>
+                    <p className="mt-1.5 text-xs text-ink/45">These fields are stored locally and synced to Firebase.</p>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label>
+                      <FieldLabel>Full name *</FieldLabel>
                       <input
                         type="text"
                         value={formData.fullName}
                         onChange={(e) => handleInputChange('fullName', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={inputClass}
                         placeholder="Enter your full name"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Email *</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Email *</FieldLabel>
                       <input
                         type="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={inputClass}
                         placeholder="Enter your email"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Phone</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Phone</FieldLabel>
                       <input
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => handleInputChange('phone', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={inputClass}
                         placeholder="Phone number"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Location</FieldLabel>
                       <input
                         type="text"
                         value={formData.location}
                         onChange={(e) => handleInputChange('location', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={inputClass}
                         placeholder="City, Country"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Organization</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Organization</FieldLabel>
                       <input
                         type="text"
                         value={formData.organization}
                         onChange={(e) => handleInputChange('organization', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={inputClass}
                         placeholder="Company or institution"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Workspace Name</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Workspace name</FieldLabel>
                       <input
                         type="text"
                         value={formData.workspaceName}
                         onChange={(e) => handleInputChange('workspaceName', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={inputClass}
                         placeholder="Grid Operations Team"
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Role</FieldLabel>
                       <select
                         value={formData.role}
                         onChange={(e) => handleInputChange('role', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={`${inputClass} cursor-pointer`}
                       >
                         <option value="">Select your role</option>
                         <option value="analyst">Energy Analyst</option>
@@ -743,58 +814,65 @@ const UserProfile = () => {
                         <option value="student">Student</option>
                         <option value="other">Other</option>
                       </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Experience Level</label>
+                    </label>
+                    <label>
+                      <FieldLabel>Experience level</FieldLabel>
                       <select
                         value={formData.experience}
                         onChange={(e) => handleInputChange('experience', e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-800/70 border border-slate-700 rounded-xl text-white focus:border-cyan-400 focus:outline-none"
+                        className={`${inputClass} cursor-pointer`}
                       >
                         <option value="beginner">Beginner</option>
                         <option value="intermediate">Intermediate</option>
                         <option value="advanced">Advanced</option>
                         <option value="expert">Expert</option>
                       </select>
-                    </div>
+                    </label>
                   </div>
-                </div>
+                </Panel>
 
-                <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-4 sm:p-6 space-y-5">
+                <Panel className="space-y-5 p-5 sm:p-6">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-2">Workspace Snapshot</p>
-                    <h3 className="text-2xl font-black text-white">
+                    <p className="label text-ink/35">Workspace snapshot</p>
+                    <h3 className="mt-2 text-lg font-medium leading-snug tracking-[-0.03em]">
                       {formData.workspaceName || formData.organization || 'Set up your workspace'}
                     </h3>
-                    <p className="text-slate-400 text-sm mt-2">
-                      Keep profile details, history, and collaboration context aligned for repeat analysis sessions.
+                    <p className="mt-2 text-xs leading-relaxed text-ink/45">
+                      Keep profile details, history and collaboration context aligned for repeat analysis sessions.
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                      <Building2 className="text-cyan-300 mb-3" size={18} />
-                      <p className="text-xs uppercase tracking-wider text-slate-500">Org</p>
-                      <p className="text-white font-semibold mt-1 break-words">{formData.organization || 'Not set'}</p>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                      <Building2 className="mb-2.5 text-ink/35" size={16} />
+                      <p className="label-sm text-ink/35">Org</p>
+                      <p className="mt-1 break-words text-xs font-medium text-ink">{formData.organization || 'Not set'}</p>
                     </div>
-                    <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                      <Activity className="text-cyan-300 mb-3" size={18} />
-                      <p className="text-xs uppercase tracking-wider text-slate-500">Role</p>
-                      <p className="text-white font-semibold mt-1 capitalize">{formData.role || 'Not set'}</p>
+                    <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                      <Activity className="mb-2.5 text-ink/35" size={16} />
+                      <p className="label-sm text-ink/35">Role</p>
+                      <p className="mt-1 break-words text-xs font-medium capitalize text-ink">{formData.role || 'Not set'}</p>
                     </div>
                   </div>
+
+                  <div className="rounded-xl border border-ink/10 bg-paper-100 p-3.5">
+                    <p className="label-sm text-ink/35">Experience</p>
+                    <p className="mt-1.5 text-xs font-medium capitalize text-ink">{formData.experience || 'Not set'}</p>
+                  </div>
+
                   <button
                     onClick={saveProfile}
                     disabled={isLoading || !formData.fullName || !formData.email}
-                    className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-700 text-slate-950 font-bold rounded-2xl transition-all"
+                    className={buttonClass('primary', 'lg', 'w-full')}
                   >
                     {isLoading ? (
-                      <div className="w-5 h-5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-paper/25 border-t-paper" />
                     ) : (
-                      <Save size={18} />
+                      <Save size={16} />
                     )}
-                    {isNewUser ? 'Complete Workspace Setup' : 'Save Profile'}
+                    {isNewUser ? 'Complete workspace setup' : 'Save profile'}
                   </button>
-                </div>
+                </Panel>
               </div>
             </motion.div>
           )}
@@ -802,107 +880,110 @@ const UserProfile = () => {
           {activeTab === 'history' && (
             <motion.div
               key="history"
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: EASE }}
+              className="space-y-4"
             >
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-4 border-b border-ink/10 pb-5 md:flex-row md:items-end md:justify-between">
                 <div>
-                  <h3 className="text-2xl font-black text-white">Prediction History</h3>
-                  <p className="text-slate-400 text-sm">Stored model2 forecast sessions with horizon, source, and fallback context.</p>
+                  <p className="label text-ink/35">Saved sessions</p>
+                  <h2 className="mt-1.5 text-xl font-medium tracking-[-0.03em]">Prediction history</h2>
+                  <p className="mt-1.5 text-xs text-ink/45">
+                    Model 2 forecast sessions with horizon, source and fallback context.
+                  </p>
                 </div>
-                <button
-                  onClick={exportHistory}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-800/70 hover:bg-slate-700/70 text-white transition-all"
-                >
-                  <Download size={16} />
-                  Export History
+                <button onClick={exportHistory} className={buttonClass('outline', 'md')}>
+                  <Download size={15} />
+                  Export history
                 </button>
               </div>
 
               {historyLoading ? (
-                <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-8 text-center">
-                  <div className="w-10 h-10 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-slate-300">Loading forecast history...</p>
-                </div>
+                <Panel className="p-10 text-center">
+                  <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-ink/10 border-t-moss" />
+                  <p className="text-sm text-ink/50">Loading forecast history…</p>
+                </Panel>
               ) : analyticsHistory.length === 0 ? (
-                <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-10 text-center">
-                  <BarChart3 className="mx-auto text-slate-500 mb-4" size={48} />
-                  <p className="text-slate-300 font-medium">No analytics history yet</p>
-                  <p className="text-slate-500 text-sm mt-2">Run forecasts in Load Predictor and they will appear here automatically.</p>
-                </div>
+                <Panel className="p-10 text-center sm:p-14">
+                  <BarChart3 className="mx-auto mb-4 text-ink/25" size={40} />
+                  <p className="text-sm font-medium text-ink/65">No analytics history yet</p>
+                  <p className="mt-1.5 text-xs text-ink/40">
+                    Run forecasts in the Load Predictor and they will appear here automatically.
+                  </p>
+                </Panel>
               ) : (
-                <div className="space-y-4">
-                  {analyticsHistory.map((item) => (
-                    <div key={item.id} className="rounded-3xl border border-white/10 bg-slate-900/65 p-5">
-                      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-400/20 flex items-center justify-center">
-                              <TrendingUp className="text-cyan-300" size={18} />
+                <div className="space-y-3">
+                  {analyticsHistory.map((item, index) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: Math.min(index * 0.03, 0.24), ease: EASE }}
+                    >
+                      <Panel className="p-5">
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-ink/10 bg-paper-100 text-moss">
+                                <TrendingUp size={17} />
+                              </span>
+                              <div>
+                                <p className="text-sm font-medium">Load forecast session</p>
+                                <p className="mt-0.5 text-[0.68rem] text-ink/40">{new Date(item.timestamp).toLocaleString()}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-white font-semibold">Load Forecast Session</p>
-                              <p className="text-slate-400 text-sm">{new Date(item.timestamp).toLocaleString()}</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <Badge tone="neutral">Horizon {item.forecastHorizon}h</Badge>
+                              <Badge tone="neutral">Source {item.predictionSource}</Badge>
+                              <Badge tone={item.fallbackUsed ? 'clay' : 'moss'}>
+                                <StatusDot tone={item.fallbackUsed ? 'amber' : 'green'} pulse={false} />
+                                {item.fallbackUsed ? 'Fallback used' : 'Model output'}
+                              </Badge>
                             </div>
                           </div>
-                          <div className="flex flex-wrap gap-2">
-                            <span className="px-3 py-1 rounded-full bg-slate-800 text-slate-200 text-xs">
-                              Horizon: {item.forecastHorizon}h
-                            </span>
-                            <span className="px-3 py-1 rounded-full bg-slate-800 text-slate-200 text-xs">
-                              Source: {item.predictionSource}
-                            </span>
-                            <span className={`px-3 py-1 rounded-full text-xs ${
-                              item.fallbackUsed ? 'bg-amber-500/15 text-amber-200' : 'bg-emerald-500/15 text-emerald-200'
-                            }`}>
-                              {item.fallbackUsed ? 'Fallback used' : 'Model output'}
-                            </span>
+
+                          <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:min-w-[26rem]">
+                            {[
+                              ['Next hour', `${Math.round(item.nextHourPrediction).toLocaleString()} MW`],
+                              ['Latest step', `${Math.round(item.latestPrediction).toLocaleString()} MW`],
+                              ['Peak', `${Math.round(item.statistics.peak || 0).toLocaleString()} MW`],
+                            ].map(([label, value]) => (
+                              <div key={label} className="rounded-lg border border-ink/10 bg-paper-100 p-3">
+                                <p className="label-sm text-ink/35">{label}</p>
+                                <p className="mono-num mt-1.5 text-xs font-medium">{value}</p>
+                              </div>
+                            ))}
+                            <div className="rounded-lg border border-ink/10 bg-paper-100 p-3">
+                              <p className="label-sm text-ink/35">Delta</p>
+                              <p className={`mono-num mt-1.5 text-xs font-medium ${
+                                item.statistics.delta > 0 ? 'text-clay' : item.statistics.delta < 0 ? 'text-moss' : 'text-ink'
+                              }`}>
+                                {Math.round(item.statistics.delta || 0).toLocaleString()} MW
+                              </p>
+                            </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 min-w-0 lg:min-w-[420px]">
-                          <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                            <p className="text-xs uppercase tracking-wider text-slate-500">Next Hour</p>
-                            <p className="text-white font-bold mt-2">{Math.round(item.nextHourPrediction).toLocaleString()} MW</p>
+                        {item.predictionSeries.length > 0 && (
+                          <div className="mt-4 grid grid-cols-2 gap-2 border-t border-ink/10 pt-4 md:grid-cols-4 xl:grid-cols-6">
+                            {item.predictionSeries.slice(0, 6).map((entry) => (
+                              <div key={`${item.id}-${entry.step}`} className="rounded-lg bg-paper-100 p-2.5">
+                                <p className="label-sm text-ink/30">Step {entry.step}</p>
+                                <p className="mono-num mt-1.5 text-xs font-medium">{Math.round(entry.value).toLocaleString()} MW</p>
+                              </div>
+                            ))}
                           </div>
-                          <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                            <p className="text-xs uppercase tracking-wider text-slate-500">Latest Step</p>
-                            <p className="text-white font-bold mt-2">{Math.round(item.latestPrediction).toLocaleString()} MW</p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                            <p className="text-xs uppercase tracking-wider text-slate-500">Peak</p>
-                            <p className="text-white font-bold mt-2">{Math.round(item.statistics.peak || 0).toLocaleString()} MW</p>
-                          </div>
-                          <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                            <p className="text-xs uppercase tracking-wider text-slate-500">Delta</p>
-                            <p className={`font-bold mt-2 ${
-                              item.statistics.delta > 0 ? 'text-rose-300' : item.statistics.delta < 0 ? 'text-emerald-300' : 'text-white'
-                            }`}>
-                              {Math.round(item.statistics.delta || 0).toLocaleString()} MW
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                        )}
 
-                      {item.predictionSeries.length > 0 && (
-                        <div className="mt-5 grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
-                          {item.predictionSeries.slice(0, 6).map((entry) => (
-                            <div key={`${item.id}-${entry.step}`} className="rounded-2xl border border-white/5 bg-slate-950/50 p-3">
-                              <p className="text-[11px] uppercase tracking-wider text-slate-500">Step {entry.step}</p>
-                              <p className="text-white font-semibold mt-2">{Math.round(entry.value).toLocaleString()} MW</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {item.fallbackReason && (
-                        <p className="mt-4 text-sm text-amber-200">
-                          Fallback reason: {item.fallbackReason}
-                        </p>
-                      )}
-                    </div>
+                        {item.fallbackReason && (
+                          <p className="mt-3 text-[0.7rem] leading-relaxed text-amber-700">
+                            Fallback reason: {item.fallbackReason}
+                          </p>
+                        )}
+                      </Panel>
+                    </motion.div>
                   ))}
                 </div>
               )}
@@ -912,150 +993,210 @@ const UserProfile = () => {
           {activeTab === 'workspace' && (
             <motion.div
               key="workspace"
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              className="grid grid-cols-1 xl:grid-cols-2 gap-6"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: EASE }}
+              className="grid grid-cols-1 gap-4 xl:grid-cols-2"
             >
-              <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-6 space-y-5">
+              <Panel className="space-y-5 p-5 sm:p-7">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-2">Invite Teammates</p>
-                  <h3 className="text-2xl font-black text-white">Share your analysis workspace</h3>
-                  <p className="text-slate-400 text-sm mt-2">
-                    Send a registration link that carries your workspace and organization context so new teammates can join the same analysis setup.
+                  <p className="label text-ink/35">Invite teammates</p>
+                  <h3 className="mt-2 text-xl font-medium tracking-[-0.03em]">Share your analysis workspace</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-ink/45">
+                    Send a registration link that carries your workspace and organization context so new
+                    teammates can join the same analysis setup.
                   </p>
                 </div>
-                <div className="rounded-2xl bg-slate-950/50 border border-white/5 p-4">
-                  <div className="flex items-start gap-3">
-                    <Link2 className="text-cyan-300 mt-1" size={18} />
-                    <p className="text-sm text-slate-200 break-all">{workspaceInviteLink}</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={copyInviteLink}
-                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold transition-all"
-                  >
-                    <Copy size={16} />
-                    Copy Link
-                  </button>
-                  <button
-                    onClick={shareInviteLink}
-                    className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-all"
-                  >
-                    <Share2 size={16} />
-                    Share Invite
-                  </button>
-                </div>
-              </div>
 
-              <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-6 space-y-5">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-300 mb-2">Workspace State</p>
-                  <h3 className="text-2xl font-black text-white">{formData.workspaceName || 'No workspace name yet'}</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                    <Building2 className="text-cyan-300 mb-3" size={18} />
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Organization</p>
-                    <p className="text-white font-semibold mt-2">{formData.organization || 'Not set'}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                    <Users className="text-cyan-300 mb-3" size={18} />
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Invited By</p>
-                    <p className="text-white font-semibold mt-2">{inviteContext?.invitedBy || formData.fullName || 'You'}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                    <Clock className="text-cyan-300 mb-3" size={18} />
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Average Horizon</p>
-                    <p className="text-white font-semibold mt-2">{analyticsSummary.averageHorizon.toFixed(1)} hours</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-800/70 p-4 border border-white/5">
-                    <Zap className="text-cyan-300 mb-3" size={18} />
-                    <p className="text-xs uppercase tracking-wider text-slate-500">Saved Runs</p>
-                    <p className="text-white font-semibold mt-2">{analyticsSummary.totalRuns}</p>
+                <div className="rounded-xl border border-ink/10 bg-paper-100 p-4">
+                  <div className="flex items-start gap-3">
+                    <Link2 className="mt-0.5 shrink-0 text-moss" size={16} />
+                    <p className="break-all font-mono text-[0.7rem] leading-relaxed text-ink/65">{workspaceInviteLink}</p>
                   </div>
                 </div>
-                <div className="rounded-2xl bg-cyan-500/10 border border-cyan-400/20 p-4">
-                  <p className="text-sm text-slate-200">
-                    Teammates opening the invite link land on registration with your workspace context preloaded, then continue into the shared analysis setup after sign-up.
+
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={copyInviteLink} className={buttonClass('primary', 'md')}>
+                    <Copy size={15} />
+                    Copy link
+                  </button>
+                  <button onClick={shareInviteLink} className={buttonClass('outline', 'md')}>
+                    <Share2 size={15} />
+                    Share invite
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-signal-500/30 bg-signal/25 p-4">
+                  <p className="label-sm text-ink/45">How invites work</p>
+                  <p className="mt-1.5 text-[0.7rem] leading-relaxed text-ink/60">
+                    Teammates opening the link land on registration with your workspace context preloaded,
+                    then continue into the shared setup after sign-up.
                   </p>
                 </div>
-              </div>
+              </Panel>
+
+              <Panel className="space-y-5 p-5 sm:p-7">
+                <div>
+                  <p className="label text-ink/35">Workspace state</p>
+                  <h3 className="mt-2 text-xl font-medium tracking-[-0.03em]">
+                    {formData.workspaceName || 'No workspace name yet'}
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                  {[
+                    { icon: Building2, label: 'Organization', value: formData.organization || 'Not set' },
+                    { icon: Users, label: 'Invited by', value: inviteContext?.invitedBy || formData.fullName || 'You' },
+                    { icon: Clock, label: 'Average horizon', value: `${analyticsSummary.averageHorizon.toFixed(1)} hours` },
+                    { icon: Zap, label: 'Saved runs', value: analyticsSummary.totalRuns },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-xl border border-ink/10 bg-paper-100 p-4">
+                      <item.icon className="mb-2.5 text-ink/35" size={16} />
+                      <p className="label-sm text-ink/35">{item.label}</p>
+                      <p className="mt-1.5 break-words text-xs font-medium text-ink">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-ink/10 pt-4">
+                  <div className="flex items-center justify-between">
+                    <span className="label-sm text-ink/35">Members</span>
+                    <span className="mono-num text-xs font-medium">1 active</span>
+                  </div>
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-signal text-[0.65rem] font-semibold text-ink">
+                      {(formData.fullName || user?.email || 'L').charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium">{formData.fullName || 'You'}</p>
+                      <p className="truncate text-[0.65rem] text-ink/40">{formData.email || user?.email || 'No email set'}</p>
+                    </div>
+                    <Badge tone="moss" className="ml-auto">Owner</Badge>
+                  </div>
+                </div>
+              </Panel>
             </motion.div>
           )}
 
           {activeTab === 'settings' && (
             <motion.div
               key="settings"
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: EASE }}
+              className="grid grid-cols-1 gap-4 xl:grid-cols-2"
             >
-              <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Notification Settings</h3>
-                <div className="flex items-center justify-between gap-6">
+              <Panel className="p-5 sm:p-6">
+                <p className="label text-ink/35">Preferences</p>
+                <h3 className="mt-1.5 text-lg font-medium tracking-[-0.03em]">Notification settings</h3>
+
+                <div className="mt-5 flex items-center justify-between gap-6 border-t border-ink/10 pt-5">
                   <div>
-                    <p className="text-slate-200 font-medium">Browser Notifications</p>
-                    <p className="text-slate-500 text-sm">Receive updates when long-running analytics complete.</p>
+                    <p className="text-sm font-medium text-ink/75">Browser notifications</p>
+                    <p className="mt-1 text-xs leading-relaxed text-ink/45">
+                      Receive updates when long-running analytics complete.
+                    </p>
                   </div>
                   <button
                     onClick={toggleNotifications}
-                    className={`w-14 h-7 rounded-full transition-all ${formData.notifications ? 'bg-cyan-500' : 'bg-slate-600'}`}
+                    role="switch"
+                    aria-checked={formData.notifications}
+                    aria-label="Toggle browser notifications"
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-300 ${
+                      formData.notifications ? 'bg-moss' : 'bg-ink/15'
+                    }`}
                   >
-                    <div className={`w-6 h-6 bg-white rounded-full transition-all ${formData.notifications ? 'translate-x-7' : 'translate-x-1'}`} />
+                    <motion.span
+                      className="absolute top-0.5 h-5 w-5 rounded-full bg-paper-50 shadow-sm"
+                      animate={{ left: formData.notifications ? '1.375rem' : '0.125rem' }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                    />
                   </button>
                 </div>
-              </div>
+              </Panel>
 
-              <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-6">
-                <h3 className="text-xl font-bold text-white mb-4">Support</h3>
-                <p className="text-slate-300 mb-4">
+              <Panel className="p-5 sm:p-6">
+                <p className="label text-ink/35">Support</p>
+                <h3 className="mt-1.5 text-lg font-medium tracking-[-0.03em]">Report an issue</h3>
+                <p className="mt-2 text-xs leading-relaxed text-ink/45">
                   Report a workspace or analytics issue and keep the rest of the system running while we investigate.
                 </p>
-                <button
-                  onClick={reportIssue}
-                  className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition-all"
-                >
-                  <AlertTriangle size={18} />
-                  Report Issue
+                <button onClick={reportIssue} className={buttonClass('danger', 'md', 'mt-5')}>
+                  <AlertTriangle size={15} />
+                  Report issue
                 </button>
-              </div>
+              </Panel>
+
+              <Panel className="p-5 sm:p-6 xl:col-span-2">
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="label text-ink/35">Session</p>
+                    <p className="mt-1.5 text-sm font-medium">{user?.email || 'Local workspace'}</p>
+                    <p className="mt-1 text-[0.68rem] text-ink/40">
+                      Account state is managed by Firebase Auth.
+                    </p>
+                  </div>
+                  <button onClick={() => navigate('/dashboard')} className={buttonClass('outline', 'md')}>
+                    Return to console
+                  </button>
+                </div>
+              </Panel>
             </motion.div>
           )}
 
           {activeTab === 'notifications' && (
             <motion.div
               key="notifications"
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.4, ease: EASE }}
+              className="grid grid-cols-1 gap-4 xl:grid-cols-2"
             >
-              <div className="rounded-3xl border border-white/10 bg-slate-900/65 p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <Bell className="text-cyan-300" size={22} />
-                  <h3 className="text-xl font-bold text-white">Notification Center</h3>
+              <Panel className="p-5 sm:p-6">
+                <div className="flex items-center gap-2.5">
+                  <Bell className="text-ink/45" size={17} />
+                  <h3 className="text-lg font-medium tracking-[-0.03em]">Notification center</h3>
                 </div>
-                <p className="text-slate-300 mb-4">
-                  Forecast completion alerts use your browser permission state and your saved workspace preferences.
+                <p className="mt-2 text-xs leading-relaxed text-ink/45">
+                  Forecast completion alerts use your browser permission state and saved workspace preferences.
                 </p>
-                <div className="rounded-2xl bg-slate-950/50 p-4 border border-white/5">
-                  <p className="text-sm text-slate-300">
-                    Permission Status:{' '}
-                    <span className="font-semibold text-white">
-                      {'Notification' in window
-                        ? Notification.permission === 'granted'
-                          ? 'Granted'
-                          : Notification.permission === 'denied'
-                            ? 'Denied'
-                            : 'Not requested'
-                        : 'Not supported'}
-                    </span>
+
+                <div className="mt-5 rounded-xl border border-ink/10 bg-paper-100 p-4">
+                  <p className="label-sm text-ink/35">Permission status</p>
+                  <p className="mt-1.5 text-sm font-medium">
+                    {'Notification' in window
+                      ? Notification.permission === 'granted'
+                        ? 'Granted'
+                        : Notification.permission === 'denied'
+                          ? 'Denied'
+                          : 'Not requested'
+                      : 'Not supported'}
                   </p>
                 </div>
-              </div>
+              </Panel>
+
+              <Panel className="p-5 sm:p-6">
+                <p className="label text-ink/35">Delivery</p>
+                <h3 className="mt-1.5 text-lg font-medium tracking-[-0.03em]">What you will receive</h3>
+                <div className="mt-4 space-y-0">
+                  {[
+                    ['Forecast completion', 'When a multi-step run finishes'],
+                    ['Fallback notices', 'If Render hands off to Railway'],
+                    ['Workspace updates', 'Invites and profile sync state'],
+                  ].map(([label, note], index) => (
+                    <div key={label} className={`flex items-center justify-between gap-4 py-3 ${index < 2 ? 'border-b border-ink/10' : ''}`}>
+                      <div>
+                        <p className="text-xs font-medium">{label}</p>
+                        <p className="mt-0.5 text-[0.65rem] text-ink/40">{note}</p>
+                      </div>
+                      <StatusDot tone="green" pulse={false} />
+                    </div>
+                  ))}
+                </div>
+              </Panel>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1065,26 +1206,29 @@ const UserProfile = () => {
         {notifications.map((notification) => (
           <motion.div
             key={notification.id}
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -30 }}
-            className={`fixed top-4 right-4 z-50 p-4 rounded-2xl shadow-lg ${
-              notification.type === 'success'
-                ? 'bg-emerald-600 text-white'
-                : notification.type === 'error'
-                  ? 'bg-rose-600 text-white'
-                  : 'bg-sky-600 text-white'
-            }`}
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 30 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="fixed left-4 right-4 top-4 z-[90] sm:left-auto sm:right-6 sm:top-6 sm:max-w-sm"
           >
-            <div className="flex items-center gap-3">
-              {notification.type === 'success' ? (
-                <CheckCircle size={18} />
-              ) : notification.type === 'error' ? (
-                <X size={18} />
-              ) : (
-                <Bell size={18} />
-              )}
-              <p className="font-medium">{notification.message}</p>
+            <div className="flex items-center gap-3 rounded-xl border border-ink/15 bg-paper-50 p-3.5 shadow-lift">
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                notification.type === 'success'
+                  ? 'bg-moss/10 text-moss'
+                  : notification.type === 'error'
+                    ? 'bg-clay/10 text-clay'
+                    : 'bg-sky/10 text-sky'
+              }`}>
+                {notification.type === 'success' ? (
+                  <CheckCircle size={16} />
+                ) : notification.type === 'error' ? (
+                  <X size={16} />
+                ) : (
+                  <Bell size={16} />
+                )}
+              </span>
+              <p className="text-xs font-medium text-ink/75">{notification.message}</p>
             </div>
           </motion.div>
         ))}

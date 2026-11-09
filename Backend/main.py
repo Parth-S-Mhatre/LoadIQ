@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import importlib
+import os
 from threading import Lock
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from documents.router import router as documents_router
 
 
 class LazyFastAPIApp:
@@ -43,6 +47,34 @@ app = FastAPI(
 )
 
 
+def _cors_origins_from_env() -> list[str]:
+    """Mirror the Model1/Model2 CORS policy for the combined health routes."""
+    origins_csv = os.getenv("FRONTEND_ORIGINS", "").strip()
+    single_origin = os.getenv("FRONTEND_ORIGIN", "").strip()
+
+    if origins_csv:
+        origins = [origin.strip() for origin in origins_csv.split(",") if origin.strip()]
+        if origins:
+            return origins
+
+    if single_origin:
+        return [single_origin]
+
+    return ["*"]
+
+
+_cors_origins = _cors_origins_from_env()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_origins != ["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(documents_router)
+
+
 @app.get("/")
 def root():
     return {
@@ -59,6 +91,15 @@ def root():
             "predict_batch": "POST /model2/predict_batch",
             "features": "GET /model2/features",
             "health": "GET /model2/health",
+        },
+        "documents": {
+            "upload": "POST /documents",
+            "list": "GET /documents",
+            "status": "GET /documents/{document_id}",
+            "extraction": "GET /documents/{document_id}/extraction",
+            "confirm": "POST /documents/{document_id}/confirm",
+            "analytics": "GET /documents/{document_id}/analytics",
+            "report": "GET /documents/{document_id}/report",
         },
     }
 

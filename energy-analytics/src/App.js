@@ -9,6 +9,7 @@ import AuthSkeleton from "./skeleton_pages/AuthSkeleton";
 import DashboardSkeleton from "./skeleton_pages/DashboardSkeleton";
 import EnergyChatbot from './components/EnergyChatbot';
 import ProfileSkeleton from "./skeleton_pages/ProfileSkeleton";
+import BackendConnection from "./components/BackendConnection";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
@@ -22,6 +23,7 @@ function App() {
     <AuthProvider>
       <DisclaimerProvider>
         <Router>
+          <BackendConnection />
           <Routes>
             <Route
               path="/"
@@ -61,7 +63,7 @@ function App() {
           />
         </Routes>
         <EnergyChatbot />
-      </Router>
+        </Router>
       </DisclaimerProvider>
     </AuthProvider>
   );

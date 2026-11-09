@@ -1,5 +1,11 @@
 // API Configuration for LoadIQ Backend
 const trimTrailingSlash = (url) => url.replace(/\/+$/, '');
+const DEFAULT_PRIMARY_BACKEND_URL = 'https://loadiq-backend.onrender.com';
+const DEFAULT_BACKUP_MODEL1_URL = 'https://loadiq-model1-production.up.railway.app';
+const DEFAULT_BACKUP_MODEL2_URL = 'https://loadiq-model2-production.up.railway.app';
+const MAINTENANCE_START_ISO = '2026-05-27T01:00:00Z';
+const MAINTENANCE_END_ISO = '2026-05-27T02:00:00Z';
+
 const isLocalHost = () => {
     if (typeof window === 'undefined') {
         return false;
@@ -21,7 +27,7 @@ const resolveBaseUrl = () => {
         return 'http://127.0.0.1:8000';
     }
 
-    return 'https://loadiq.onrender.com';
+    return DEFAULT_PRIMARY_BACKEND_URL;
 };
 
 const resolveModel1Url = () => {
@@ -40,10 +46,47 @@ const resolveModel2Url = () => {
     return `${resolveBaseUrl()}/model2`;
 };
 
+const resolveBackupModel1Url = () => {
+    if (process.env.REACT_APP_BACKUP_MODEL1_API) {
+        return trimTrailingSlash(process.env.REACT_APP_BACKUP_MODEL1_API);
+    }
+
+    return DEFAULT_BACKUP_MODEL1_URL;
+};
+
+const resolveBackupModel2Url = () => {
+    if (process.env.REACT_APP_BACKUP_MODEL2_API) {
+        return trimTrailingSlash(process.env.REACT_APP_BACKUP_MODEL2_API);
+    }
+
+    return DEFAULT_BACKUP_MODEL2_URL;
+};
+
+export const MAINTENANCE_WINDOW = {
+    START: new Date(MAINTENANCE_START_ISO),
+    END: new Date(MAINTENANCE_END_ISO)
+};
+
+export const formatCountdown = (totalMs) => {
+    const safeMs = Math.max(0, Math.floor(totalMs));
+    const totalSeconds = Math.floor(safeMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+    }
+
+    return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+};
+
 export const API_CONFIG = {
     BASE_URL: resolveBaseUrl(),
     MODEL1_API: resolveModel1Url(),
     MODEL2_API: resolveModel2Url(),
+    BACKUP_MODEL1_API: resolveBackupModel1Url(),
+    BACKUP_MODEL2_API: resolveBackupModel2Url(),
     ENDPOINTS: {
         PREDICT: '/predict',
         HEALTH: '/health',
@@ -68,18 +111,26 @@ export const API_CONFIG = {
 };
 
 // Helper function to build full URL
-export const buildUrl = (endpoint) => {
-    return `${API_CONFIG.BASE_URL}${endpoint}`;
+export const buildUrl = (endpoint, baseUrl = API_CONFIG.BASE_URL) => {
+    return `${baseUrl}${endpoint}`;
 };
 
 // Helper function to build Model1 URL for single predictions
-export const buildModel1Url = (endpoint) => {
-    return `${API_CONFIG.MODEL1_API}${endpoint}`;
+export const buildModel1Url = (endpoint, baseUrl = API_CONFIG.MODEL1_API) => {
+    return `${baseUrl}${endpoint}`;
 };
 
 // Helper function to build Model2 URL for batch predictions and forecasts
-export const buildModel2Url = (endpoint) => {
-    return `${API_CONFIG.MODEL2_API}${endpoint}`;
+export const buildModel2Url = (endpoint, baseUrl = API_CONFIG.MODEL2_API) => {
+    return `${baseUrl}${endpoint}`;
+};
+
+export const buildBackupModel1Url = (endpoint, baseUrl = API_CONFIG.BACKUP_MODEL1_API) => {
+    return `${baseUrl}${endpoint}`;
+};
+
+export const buildBackupModel2Url = (endpoint, baseUrl = API_CONFIG.BACKUP_MODEL2_API) => {
+    return `${baseUrl}${endpoint}`;
 };
 
 // Helper function for exponential backoff
@@ -165,4 +216,53 @@ export const fetchWithRetry = async (
     }
 
     throw lastError;
+};
+
+export const fetchWithBackendFallback = async (
+    primaryUrl,
+    fallbackUrl,
+    options = {},
+    timeout = API_CONFIG.TIMEOUTS.DEFAULT
+) => {
+    let primaryResponse;
+
+    try {
+        primaryResponse = await fetchWithTimeout(primaryUrl, options, timeout);
+    } catch (primaryError) {
+        if (!fallbackUrl) {
+            throw primaryError;
+        }
+
+        const fallbackResponse = await fetchWithTimeout(fallbackUrl, options, timeout);
+        if (!fallbackResponse.ok) {
+            throw new Error(`Fallback backend responded with ${fallbackResponse.status}`);
+        }
+
+        return {
+            response: fallbackResponse,
+            source: 'fallback'
+        };
+    }
+
+    if (primaryResponse.ok) {
+        return {
+            response: primaryResponse,
+            source: 'primary'
+        };
+    }
+
+    const shouldTryFallback = primaryResponse.status >= 500 || primaryResponse.status === 404 || primaryResponse.status === 405;
+    if (!shouldTryFallback || !fallbackUrl) {
+        throw new Error(`Backend responded with ${primaryResponse.status}`);
+    }
+
+    const fallbackResponse = await fetchWithTimeout(fallbackUrl, options, timeout);
+    if (!fallbackResponse.ok) {
+        throw new Error(`Fallback backend responded with ${fallbackResponse.status}`);
+    }
+
+    return {
+        response: fallbackResponse,
+        source: 'fallback'
+    };
 };
