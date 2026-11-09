@@ -399,7 +399,7 @@ export default function Landing() {
                     <span className="h-1.5 w-1.5 rounded-full bg-signal-300 animate-blink" />
                     Live grid snapshot
                   </Badge>
-                  <span className="label-sm text-paper/50">DE-LU · 14:00 UTC</span>
+                  <span className="label-sm text-paper/50">GB · 14:00 UTC</span>
                 </div>
 
                 <div className="absolute inset-x-5 bottom-5">
@@ -408,7 +408,7 @@ export default function Landing() {
                       <div>
                         <p className="label-sm text-paper/45">Predicted load · next hour</p>
                         <p className="mono-num mt-2 text-3xl font-medium text-paper sm:text-4xl">
-                          55,570 <span className="text-sm font-normal text-paper/50">MW</span>
+                          28,120 <span className="text-sm font-normal text-paper/50">MW</span>
                         </p>
                       </div>
                       <div className="text-right">
