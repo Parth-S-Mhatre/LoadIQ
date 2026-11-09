@@ -231,7 +231,12 @@ def main() -> int:
     joblib.dump(xgb_model, args.output / "xgb_gb_model.pkl")
     joblib.dump(ridge_model, args.output / "ridge_gb_model.pkl")
     joblib.dump(scaler, args.output / "X_scaler_gb.pkl")
-    joblib.dump(FEATURE_NAMES, args.output / "feature_names_gb.pkl")
+    joblib.dump(list(FEATURE_NAMES), args.output / "feature_names_gb.pkl")
+    # Force a plain object index: pandas 3 defaults string indexes to the new
+    # StringDtype, which raises NotImplementedError when unpickled by pandas 2
+    # (the version Render installs with numpy==1.26.4).
+    medians = medians.copy()
+    medians.index = medians.index.astype(object)
     joblib.dump(medians, args.output / "train_medians_gb.pkl")
     (args.output / "model_metadata_gb.json").write_text(json.dumps(report, indent=2) + "\n")
 

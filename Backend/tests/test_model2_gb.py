@@ -63,6 +63,23 @@ def test_non_gb_artifact_is_refused() -> None:
         Model2._load_first_available(["lgb_load_model.pkl"])
 
 
+def test_runtime_loads_and_predicts_with_ml_model() -> None:
+    """Artifacts must load on Render's older pandas, not just local pandas 3.
+
+    Pickles written with a pandas-3 ``str`` index raise NotImplementedError
+    under pandas 2.x, which silently pushed every request into the heuristic
+    fallback. Keep the medians index a plain object dtype.
+    """
+    feature_names, medians, _, lgb_model, xgb_model, _ = Model2._ensure_runtime("ensemble")
+    assert len(feature_names) == 25
+    assert medians.index.dtype == object
+    assert lgb_model is not None and xgb_model is not None
+
+    result = Model2._run_prediction({"model": "ensemble", "last_24_hours": HISTORY})
+    assert result["prediction_source"] == "ml_model"
+    assert result["fallback_used"] is False
+
+
 def test_horizon_forecast_returns_plausible_gb_values() -> None:
     client = TestClient(main.app)
     response = client.post(
