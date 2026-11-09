@@ -1,9 +1,10 @@
 """PDF text extraction and evidence-first field extraction.
 
-MVP scope: digital PDFs with a text layer.  Scanned bills are detected and
-reported as needing OCR instead of pretending extraction succeeded.  The
-important part is that every field keeps the page, line and source text that
-produced it.
+Digital PDFs are read with pypdf. If the text layer is missing or too small,
+an optional OCR backend (NVIDIA nemotron-ocr-v2) recovers line-level text plus
+normalized bounding boxes and confidence. Every field keeps the page, line and
+source text that produced it, and OCR confidence is stored alongside the regex
+match confidence.
 """
 
 from __future__ import annotations
@@ -12,6 +13,14 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+from .ocr import (
+    OCRError,
+    field_recovery_enabled,
+    min_text_chars,
+    ocr_enabled,
+    ocr_mode,
+    ocr_pdf,
+)
 from .schemas import Evidence, ExtractedField, ExtractionResult
 from .store import utc_now
 
@@ -254,29 +263,8 @@ def _extract_supplier(pages: list[list[str]]) -> ExtractedField | None:
     return None
 
 
-def extract_pdf(document_id: str, pdf_path: Path) -> ExtractionResult:
-    try:
-        from pypdf import PdfReader
-    except ImportError as exc:  # pragma: no cover - dependency guard
-        raise RuntimeError(
-            "pypdf is required for PDF extraction. Add pypdf to requirements.txt."
-        ) from exc
-
-    reader = PdfReader(str(pdf_path))
-    pages: list[list[str]] = []
-    text_chars = 0
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        text_chars += len(text)
-        pages.append(text.splitlines())
-
-    warnings: list[str] = []
-    if text_chars < 40:
-        warnings.append(
-            "This PDF has little or no text layer. OCR is not enabled in the MVP; "
-            "re-upload a digital bill or run it through OCR first."
-        )
-
+def _extract_fields(pages: list[list[str]]) -> dict[str, ExtractedField]:
+    """Apply the bill regexes to a set of page lines."""
     fields: dict[str, ExtractedField] = {}
 
     for name, value in _extract_dates(pages).items():
@@ -425,6 +413,115 @@ def extract_pdf(document_id: str, pdf_path: Path) -> ExtractionResult:
     if supplier:
         fields["supplier"] = supplier
 
+    return fields
+
+
+def _apply_ocr_evidence(
+    fields: dict[str, ExtractedField],
+    ocr_pages: dict[int, list],
+) -> None:
+    """Attach OCR bbox/confidence and provenance to evidence built from OCR text."""
+    for field in fields.values():
+        for index, evidence in enumerate(field.evidence):
+            page_lines = ocr_pages.get(evidence.page)
+            if not page_lines or evidence.line is None:
+                continue
+            if not 1 <= evidence.line <= len(page_lines):
+                continue
+            line = page_lines[evidence.line - 1]
+            field.evidence[index] = evidence.model_copy(
+                update={
+                    "bbox": list(line.bbox),
+                    "ocr_confidence": line.confidence,
+                    "method": f"{evidence.method}+ocr",
+                    "confidence": round(
+                        min(evidence.confidence, max(0.5, line.confidence)), 3
+                    ),
+                }
+            )
+
+
+def _run_ocr(
+    pdf_path: Path,
+    reason: str,
+    warnings: list[str],
+) -> tuple[list[list[str]] | None, dict[int, list]]:
+    """Run the configured OCR provider and return page text plus line boxes."""
+    try:
+        result = ocr_pdf(pdf_path)
+    except OCRError as exc:
+        warnings.append(f"OCR was requested ({reason}) but did not run: {exc}")
+        return None, {}
+    if not any(result.pages):
+        warnings.append(f"OCR ran ({reason}) but returned no text.")
+        return None, {}
+    pages = [[line.text for line in page] for page in result.pages]
+    warnings.extend(result.warnings)
+    return pages, {index: page for index, page in enumerate(result.pages, start=1)}
+
+
+def extract_pdf(document_id: str, pdf_path: Path) -> ExtractionResult:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:  # pragma: no cover - dependency guard
+        raise RuntimeError(
+            "pypdf is required for PDF extraction. Add pypdf to requirements.txt."
+        ) from exc
+
+    reader = PdfReader(str(pdf_path))
+    digital_pages: list[list[str]] = []
+    text_chars = 0
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        text_chars += len(text)
+        digital_pages.append(text.splitlines())
+
+    warnings: list[str] = []
+    ocr_used = False
+    ocr_provider: str | None = None
+    ocr_lines: dict[int, list] = {}
+    pages = digital_pages
+
+    enabled = ocr_enabled()
+    mode = ocr_mode()
+    low_text = text_chars < min_text_chars()
+
+    if enabled and mode == "always":
+        ocr_text, ocr_lines = _run_ocr(pdf_path, "OCR_MODE=always", warnings)
+        if ocr_text is not None:
+            pages, ocr_used, ocr_provider = ocr_text, True, "nemotron-ocr-v2"
+            text_chars = sum(len(line) for page in ocr_text for line in page)
+    elif enabled and mode == "auto" and (low_text or text_chars < 40):
+        ocr_text, ocr_lines = _run_ocr(pdf_path, "low text layer", warnings)
+        if ocr_text is not None:
+            pages, ocr_used, ocr_provider = ocr_text, True, "nemotron-ocr-v2"
+            text_chars = sum(len(line) for page in ocr_text for line in page)
+    elif low_text and mode != "never":
+        warnings.append(
+            "This PDF has little or no text layer and OCR is not enabled. "
+            "Set OCR_PROVIDER=nemotron and an NVIDIA API key to read scanned bills."
+        )
+
+    fields = _extract_fields(pages)
+
+    # Optional second pass: a scan with a sparse text layer but missing key fields.
+    if enabled and field_recovery_enabled() and not ocr_used:
+        required = ("consumption_kwh", "total_cost", "billing_period", "unit_rate")
+        missing = [name for name in required if name not in fields]
+        if missing:
+            reason = "missing fields: " + ", ".join(missing)
+            ocr_text, recovered_lines = _run_ocr(pdf_path, reason, warnings)
+            if ocr_text is not None:
+                pages = ocr_text
+                ocr_lines = recovered_lines
+                ocr_used = True
+                ocr_provider = "nemotron-ocr-v2"
+                text_chars = sum(len(line) for page in ocr_text for line in page)
+                fields.update(_extract_fields(pages))
+
+    if ocr_used:
+        _apply_ocr_evidence(fields, ocr_lines)
+
     for required, message in (
         ("consumption_kwh", "Consumption (kWh) was not found."),
         ("total_cost", "Total amount due was not found."),
@@ -442,14 +539,17 @@ def extract_pdf(document_id: str, pdf_path: Path) -> ExtractionResult:
         )
 
     now = utc_now()
+    page_count = max(len(reader.pages), len(ocr_lines) if ocr_used else 0)
     return ExtractionResult(
         document_id=document_id,
         status=status,
         fields=fields,
         warnings=warnings,
-        page_count=len(reader.pages),
+        page_count=page_count,
         text_chars=text_chars,
-        extractor="pypdf+regex",
+        extractor="pypdf+nemotron-ocr+regex" if ocr_used else "pypdf+regex",
+        ocr_used=ocr_used,
+        ocr_provider=ocr_provider,
         created_at=now,
         updated_at=now,
     )

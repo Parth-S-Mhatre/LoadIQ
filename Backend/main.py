@@ -100,6 +100,7 @@ def root():
             "confirm": "POST /documents/{document_id}/confirm",
             "analytics": "GET /documents/{document_id}/analytics",
             "report": "GET /documents/{document_id}/report",
+            "ocr_health": "GET /documents/ocr/health",
         },
     }
 

@@ -92,3 +92,40 @@ def test_calendar_context_is_validated() -> None:
         json={"last_24_hours": HISTORY, "hour": 24},
     )
     assert response.status_code == 422
+
+
+def test_horizon_forecast_blends_seasonal_naive_and_keeps_daily_shape() -> None:
+    start_hour = 2  # early morning: load should rise through the day
+    results = Model2._predict_horizon(
+        HISTORY, 24, "ensemble", start_hour, 2, 6
+    )
+
+    assert [result["blend_weight"] for result in results[:6]] == [
+        0.85,
+        0.6,
+        0.4,
+        0.25,
+        0.2,
+        0.2,
+    ]
+    for result in results:
+        assert "model_prediction_mw" in result
+        assert "seasonal_naive_mw" in result
+        weight = result["blend_weight"]
+        expected = (
+            weight * result["model_prediction_mw"]
+            + (1.0 - weight) * result["seasonal_naive_mw"]
+        )
+        assert result["predicted_load_mw"] == pytest.approx(expected, abs=0.01)
+
+    # The forecast follows the input daily curve instead of flattening.
+    values = [result["predicted_load_mw"] for result in results]
+    assert max(values[6:18]) > values[0]
+    assert max(values[6:18]) > min(values[18:])
+
+
+def test_horizon_forecast_extrapolates_beyond_one_day() -> None:
+    results = Model2._predict_horizon(HISTORY, 48, "ensemble", 2, 2, 6)
+    assert len(results) == 48
+    assert all(result["step"] == index + 1 for index, result in enumerate(results))
+    assert all(20_000 <= result["predicted_load_mw"] <= 60_000 for result in results)

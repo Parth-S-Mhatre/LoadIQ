@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 
 from .analytics import build_analytics
 from .extractor import extract_pdf
+from .ocr import OCRConfig, field_recovery_enabled, min_text_chars, ocr_enabled, ocr_mode
 from .report import render_report
 from .schemas import (
     AnalyticsResult,
@@ -25,6 +26,26 @@ from .store import store, utc_now
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 MAX_UPLOAD_BYTES = int(os.getenv("DOCUMENTS_MAX_UPLOAD_BYTES", str(15 * 1024 * 1024)))
+
+
+@router.get("/ocr/health")
+def ocr_health() -> dict[str, Any]:
+    """Report OCR configuration without exposing the API key."""
+    config = OCRConfig.from_env()
+    enabled = ocr_enabled()
+    return {
+        "enabled": enabled,
+        "configured": config.configured,
+        "provider": "nemotron-ocr-v2" if enabled else "none",
+        "mode": ocr_mode(),
+        "min_text_chars": min_text_chars(),
+        "field_recovery": field_recovery_enabled(),
+        "endpoint": config.url,
+        "api_key_configured": bool(config.api_key),
+        "dpi": config.dpi,
+        "max_pages": config.max_pages,
+        "max_base64_chars": config.max_base64_chars,
+    }
 
 
 def _firebase_user(authorization: str | None) -> str:

@@ -11,3 +11,6 @@ lightgbm
 pyarrow
 python-multipart>=0.0.9
 pypdf>=5.0.0
+httpx>=0.27
+pypdfium2>=4.30
+Pillow>=10.0

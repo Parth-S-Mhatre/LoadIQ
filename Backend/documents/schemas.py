@@ -28,6 +28,7 @@ class Evidence(BaseModel):
     source_text: str
     method: str = "regex"
     confidence: float = Field(ge=0.0, le=1.0)
+    ocr_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class ExtractedField(BaseModel):
@@ -50,6 +51,8 @@ class ExtractionResult(BaseModel):
     page_count: int = 0
     text_chars: int = 0
     extractor: str = "pypdf+regex"
+    ocr_used: bool = False
+    ocr_provider: str | None = None
     created_at: str
     updated_at: str
 

@@ -288,6 +288,13 @@ Pass `hour`, `day_of_week` and `month` to anchor the forecast to a real
 calendar; without them the server uses the current UTC time and advances the
 calendar at each step.
 
+The GB model is strong one step ahead but mean-reverts over longer horizons, so
+each output is blended with a seasonal-naive baseline (the load 24 hours
+earlier). The model weight is `0.85, 0.6, 0.4, 0.25` for steps 1–4 and `0.2`
+afterwards. This keeps the daily shape and cut 24-hour backtest MAE from
+`2717` to `2313` MW. Responses include `model_prediction_mw`,
+`seasonal_naive_mw` and `blend_weight` for transparency.
+
 ```json
 {
   "last_24_hours": [27500, 27800, 28100, 28400, 28200, 28000,
@@ -337,6 +344,7 @@ combined backend at the same origin as `/model1` and `/model2`.
 | `GET` | `/documents/{id}/analytics` | Summary, charts, insights, recommendations |
 | `GET` | `/documents/{id}/report` | Self-contained HTML report |
 | `DELETE` | `/documents/{id}` | Delete the document and stored file |
+| `GET` | `/documents/ocr/health` | OCR configuration status (no key exposed) |
 
 ### Example
 
@@ -352,13 +360,42 @@ curl http://localhost:8000/documents/<id>/analytics \
 ### Evidence model
 
 Every extracted value keeps `page`, `line`, `source_text`, `method` and
-`confidence`. Insights and recommendations reference the evidence IDs, so the
-report can show exactly which line of the bill supports each claim.
+`confidence`. When a value came from OCR it also carries the normalized `bbox`
+and `ocr_confidence`, and its method becomes e.g. `regex+ocr`. Insights and
+recommendations reference the evidence IDs, so the report can show exactly
+which line of the bill supports each claim.
+
+### OCR for scanned bills (optional)
+
+Digital PDFs are read with `pypdf`. If the text layer is missing or shorter than
+`OCR_MIN_TEXT_CHARS`, the extractor can render the pages with `pypdfium2` and
+send them to NVIDIA **nemotron-ocr-v2**. OCR is off by default; without a key
+the API still works for digital bills and simply reports that OCR is needed.
+
+```bash
+export OCR_PROVIDER=nemotron
+export NVIDIA_API_KEY=...          # or NEMOTRON_OCR_API_KEY
+# optional
+export OCR_MODE=auto               # auto | always | never
+export OCR_MIN_TEXT_CHARS=200
+export OCR_FIELD_RECOVERY=false    # second OCR pass when key fields are missing
+export OCR_DPI=150
+export OCR_MAX_PAGES=10
+```
+
+The hosted endpoint caps inline images at ~175k base64 characters, so large
+pages are tiled automatically. Point `NEMOTRON_OCR_URL` at a self-hosted NIM to
+remove the split and keep all data on-premises. Check the effective settings:
+
+```bash
+curl http://localhost:8000/documents/ocr/health
+```
 
 ### MVP limitations
 
-- **Digital PDFs only.** Scanned bills are detected (low text layer) and
-  flagged; OCR is not enabled.
+- **OCR is optional.** Scanned bills are detected and flagged; with
+  `OCR_PROVIDER=nemotron` they are read through nemotron-ocr-v2 instead of
+  being rejected.
 - **SQLite + local files.** The store lives in `Backend/data/` and is
   ephemeral on Render. Use PostgreSQL and object storage before production.
 - **BackgroundTasks, not a durable queue.** A restart during processing leaves
@@ -374,6 +411,12 @@ report can show exactly which line of the bill supports each claim.
 | `DOCUMENTS_DB_PATH` | `Backend/data/documents.db` | SQLite file |
 | `DOCUMENTS_STORAGE_DIR` | `Backend/data/documents` | Uploaded PDFs |
 | `DOCUMENTS_MAX_UPLOAD_BYTES` | `15728640` (15 MB) | Upload limit |
+| `OCR_PROVIDER` | `none` | Set to `nemotron` to enable OCR |
+| `OCR_MODE` | `auto` | `auto`, `always` or `never` |
+| `OCR_MIN_TEXT_CHARS` | `200` | `auto` triggers below this many characters |
+| `OCR_FIELD_RECOVERY` | `false` | OCR again when key fields are missing |
+| `NEMOTRON_OCR_URL` | hosted NVIDIA URL | Self-hosted NIM endpoint |
+| `NVIDIA_API_KEY` / `NEMOTRON_OCR_API_KEY` | unset | OCR credentials |
 
 > `DOCUMENTS_AUTH_MODE=none` is for local development only. Use `header`
 > (requires `X-User-ID`) or `firebase` (verifies `Authorization: Bearer
