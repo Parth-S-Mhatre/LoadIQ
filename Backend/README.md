@@ -432,8 +432,10 @@ pip install -r Backend/requirements-dev.txt
 python -m pytest
 ```
 
-The suite covers the GB artifact guard, Model2 calendar handling and the full
-document upload → extraction → analytics → report flow.
+The suite covers the GB artifact guard, Model2 calendar handling and
+seasonal-naive blending, OCR parsing/grouping and mocked scanned-bill
+extraction, and the full document upload → extraction → analytics → report
+flow.
 
 ---
 
